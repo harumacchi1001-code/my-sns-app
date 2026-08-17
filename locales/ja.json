@@ -175,8 +175,8 @@
     "group": "グループ",
     "noMessage": "まだメッセージがありません",
     "longPressTitle": "このチャットをどうしますか？",
-    "deleteOption": "削除（全員から削除）",
-    "leaveOption": "退会（自分だけ抜ける）",
+    "deleteOption": "削除",
+    "leaveOption": "退会",
     "cancelOption": "キャンセル"
   },
   "chatNew": {

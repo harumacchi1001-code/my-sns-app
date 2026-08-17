@@ -175,8 +175,8 @@
     "group": "Group",
     "noMessage": "No messages yet",
     "longPressTitle": "What would you like to do with this chat?",
-    "deleteOption": "Delete (remove for everyone)",
-    "leaveOption": "Leave (only leave for yourself)",
+    "deleteOption": "Delete ",
+    "leaveOption": "Leave ",
     "cancelOption": "Cancel"
   },
   "chatNew": {
