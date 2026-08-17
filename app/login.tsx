@@ -39,7 +39,11 @@ export default function LoginScreen() {
     const checkRedirectResult = async () => {
       try {
         const result = await getRedirectResult(auth);
-        if (!result) return;
+        if (!result) {
+          // ===== デバッグ用：リダイレクトから戻ってきたが、結果が空だった場合 =====
+          console.log("getRedirectResultの結果が空でした（ログイン待ちの状態がなかった）");
+          return;
+        }
 
         const uid = result.user.uid;
         const userDocRef = doc(db, "users", uid);
@@ -60,10 +64,9 @@ export default function LoginScreen() {
           router.replace("/(tabs)");
         }
       } catch (error: any) {
-        if (error?.code) {
-          console.log("Googleログインエラー:", error.message);
-          alert("Googleログインに失敗しました: " + error.message);
-        }
+        // ===== デバッグ用：エラーの内容を、条件を付けずに、必ず表示する =====
+        console.log("Googleログインエラー（詳細）:", error);
+        alert("Googleログインでエラー: " + (error?.code || "不明") + " / " + (error?.message || "詳細不明"));
       }
     };
     checkRedirectResult();
