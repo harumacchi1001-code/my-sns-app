@@ -1,12 +1,7 @@
 import { useRouter } from "expo-router";
-import {
-    GoogleAuthProvider,
-    getRedirectResult,
-    signInWithEmailAndPassword,
-    signInWithRedirect,
-} from "firebase/auth";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
     Keyboard,
@@ -33,46 +28,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // ===== ここからWeb版専用：Googleログイン（リダイレクト方式）から、戻ってきたときの処理 =====
-  useEffect(() => {
-    if (!isWeb) return;
-    const checkRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (!result) {
-          // ===== デバッグ用：リダイレクトから戻ってきたが、結果が空だった場合 =====
-          console.log("getRedirectResultの結果が空でした（ログイン待ちの状態がなかった）");
-          return;
-        }
-
-        const uid = result.user.uid;
-        const userDocRef = doc(db, "users", uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (!userDocSnap.exists()) {
-          await setDoc(userDocRef, {
-            email: result.user.email || "",
-            username: result.user.displayName || "",
-            photoUrl: result.user.photoURL || "",
-            bio: "",
-            snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
-            following: [],
-            followers: [],
-          });
-          router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
-        } else {
-          router.replace("/(tabs)");
-        }
-      } catch (error: any) {
-        // ===== デバッグ用：エラーの内容を、条件を付けずに、必ず表示する =====
-        console.log("Googleログインエラー（詳細）:", error);
-        alert("Googleログインでエラー: " + (error?.code || "不明") + " / " + (error?.message || "詳細不明"));
-      }
-    };
-    checkRedirectResult();
-  }, []);
-  // ===== ここまでWeb版専用 =====
-
   const handleLogin = async () => {
     try {
       // ===== 入力前チェック：見えない全角文字・空白を、自動で整える =====
@@ -85,11 +40,34 @@ export default function LoginScreen() {
     }
   };
 
-  // ===== ここからWeb版専用：Googleログイン（リダイレクト方式） ===== 
+  // ===== ここからWeb版専用：Googleログイン ===== 
   const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithRedirect(auth, provider);
-    // ===== ここから先の処理は、リダイレクトして戻ってきた後、useEffectの中で行う =====
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const uid = result.user.uid;
+
+      const userDocRef = doc(db, "users", uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        await setDoc(userDocRef, {
+          email: result.user.email || "",
+          username: result.user.displayName || "",
+          photoUrl: result.user.photoURL || "",
+          bio: "",
+          snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
+          following: [],
+          followers: [],
+        });
+        router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
+      } else {
+        router.replace("/(tabs)");
+      }
+    } catch (error: any) {
+      console.log("Googleログインエラー:", error.message);
+      alert("Googleログインに失敗しました: " + error.message);
+    }
   };
   // ===== ここまでWeb版専用 =====
 
