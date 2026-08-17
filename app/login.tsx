@@ -1,13 +1,6 @@
 import { useRouter } from "expo-router";
-import {
-    GoogleAuthProvider,
-    getRedirectResult,
-    signInWithEmailAndPassword,
-    signInWithPopup,
-    signInWithRedirect,
-} from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
     Keyboard,
@@ -20,12 +13,8 @@ import {
     TouchableWithoutFeedback,
     View,
 } from "react-native";
-import { auth, db } from "../firebaseConfig";
+import { auth } from "../firebaseConfig";
 import { normalizeEmail } from "../utils/emailHelpers";
-
-// ===== ここからWeb版専用 =====
-const isWeb = Platform.OS === "web";
-// ===== ここまでWeb版専用 =====
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -33,52 +22,6 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
-  // ===== ここからWeb版専用：スマホのブラウザかどうかを判定する =====
-  const isMobileBrowser = () => {
-    if (typeof navigator === "undefined") return false;
-    return /iphone|ipad|ipod|android/i.test(navigator.userAgent);
-  };
-
-  // ===== Googleログイン後、共通で行う処理（新規か、既存か、で分岐する） =====
-  const handleGoogleUserResult = async (result: any) => {
-    const uid = result.user.uid;
-    const userDocRef = doc(db, "users", uid);
-    const userDocSnap = await getDoc(userDocRef);
-
-    if (!userDocSnap.exists()) {
-      await setDoc(userDocRef, {
-        email: result.user.email || "",
-        username: result.user.displayName || "",
-        photoUrl: result.user.photoURL || "",
-        bio: "",
-        snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
-        following: [],
-        followers: [],
-      });
-      router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
-    } else {
-      router.replace("/(tabs)");
-    }
-  };
-
-  // ===== スマホの場合、リダイレクト方式で戻ってきたときの結果を確認する =====
-  useEffect(() => {
-    if (!isWeb) return;
-    if (!isMobileBrowser()) return;
-    const checkRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (!result) return;
-        await handleGoogleUserResult(result);
-      } catch (error: any) {
-        console.log("Googleログイン（リダイレクト）エラー:", error.message);
-        alert("Googleログインに失敗しました: " + error.message);
-      }
-    };
-    checkRedirectResult();
-  }, []);
-  // ===== ここまでWeb版専用 =====
 
   const handleLogin = async () => {
     try {
@@ -91,27 +34,6 @@ export default function LoginScreen() {
       alert(t("login.loginError") + error.message);
     }
   };
-
-  // ===== ここからWeb版専用：Googleログイン（スマホはリダイレクト、パソコンはポップアップ） ===== 
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-
-    if (isMobileBrowser()) {
-      // ===== スマホ：リダイレクト方式（この後は、上のuseEffectで結果を受け取る） =====
-      await signInWithRedirect(auth, provider);
-      return;
-    }
-
-    // ===== パソコン：ポップアップ方式 =====
-    try {
-      const result = await signInWithPopup(auth, provider);
-      await handleGoogleUserResult(result);
-    } catch (error: any) {
-      console.log("Googleログインエラー:", error.message);
-      alert("Googleログインに失敗しました: " + error.message);
-    }
-  };
-  // ===== ここまでWeb版専用 =====
 
   const content = (
     <KeyboardAvoidingView
@@ -154,14 +76,6 @@ export default function LoginScreen() {
         <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>{t("login.loginButton")}</Text>
         </TouchableOpacity>
-
-        {/* ===== ここからWeb版専用：Googleログインボタン ===== */}
-        {isWeb && (
-          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
-            <Text style={styles.googleButtonText}>Googleでログイン</Text>
-          </TouchableOpacity>
-        )}
-        {/* ===== ここまでWeb版専用 ===== */}
 
         <TouchableOpacity style={styles.signupButton} onPress={() => router.push("/signup")}>
           <Text style={styles.signupButtonText}>{t("login.signupButton")}</Text>
@@ -248,22 +162,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-  // ===== ここからWeb版専用：Googleボタンのスタイル =====
-  googleButton: {
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    marginBottom: 12,
-    backgroundColor: "#fff",
-  },
-  googleButtonText: {
-    color: "#333",
-    fontWeight: "600",
-    fontSize: 15,
-  },
-  // ===== ここまでWeb版専用 =====
   signupButton: {
     borderRadius: 8,
     paddingVertical: 14,
