@@ -1,16 +1,16 @@
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import { arrayRemove, collection, collectionGroup, deleteDoc, doc, DocumentData, onSnapshot, orderBy, query, updateDoc, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
+  Modal,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,6 +27,8 @@ export default function ChatListScreen() {
   const [loading, setLoading] = useState(true);
   // ===== 「すべて／個人／グループ」の、タブの選択状態 =====
   const [activeChatTab, setActiveChatTab] = useState<"all" | "individual" | "group">("all");
+  // ===== 削除・退会メニューの、対象チャット（Modalで表示） =====
+  const [menuTargetChat, setMenuTargetChat] = useState<Chat | null>(null);
   // ===== ストーリー関連の状態 =====
   const [stories, setStories] = useState<DocumentData[]>([]);
   useEffect(() => {
@@ -152,28 +154,9 @@ export default function ChatListScreen() {
     if (activeChatTab === "group") return !!chat.isGroup;
     return true;
   });
-
-  const handleLongPress = (chat: Chat) => {
-    const info = getChatDisplayInfo(chat);
-    Alert.alert(
-      info.name,
-      t("chatList.longPressTitle"),
-      [
-        {
-          text: t("chatList.deleteOption"),
-          style: "destructive",
-          onPress: () => handleDeleteChat(chat.id),
-        },
-        {
-          text: t("chatList.leaveOption"),
-          onPress: () => handleLeaveChat(chat.id),
-        },
-        {
-          text: t("chatList.cancelOption"),
-          style: "cancel",
-        },
-      ]
-    );
+  // ===== 三本線・長押しどちらでも、メニューを開く =====
+  const openChatMenu = (chat: Chat) => {
+    setMenuTargetChat(chat);
   };
   if (loading) {
     return (
@@ -238,7 +221,7 @@ export default function ChatListScreen() {
               <TouchableOpacity
                 style={styles.chatRow}
                 onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id } })}
-                onLongPress={() => handleLongPress(item)}
+                onLongPress={() => openChatMenu(item)}
               >
                 {item.isGroup ? (
                   <View style={styles.avatarPlaceholder}>
@@ -280,18 +263,55 @@ export default function ChatListScreen() {
                     </View>
                   )}
                 </View>
-              <TouchableOpacity
-                 style={styles.chatMenuButton}
-                 onPress={() => handleLongPress(item)}
-                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <MaterialIcons name="menu" size={20} color="#999" />
+                <TouchableOpacity
+                  style={styles.chatMenuButton}
+                  onPress={() => openChatMenu(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.chatMenuIcon}>≡</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
             );
           }}
         />
       </View>
+      {/* ===== 削除・退会・キャンセルの、自作メニュー（Alertはブラウザで機能しないため使わない） ===== */}
+      <Modal
+        visible={!!menuTargetChat}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuTargetChat(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setMenuTargetChat(null)}>
+          <View style={styles.chatActionOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.chatActionSheet}>
+                <TouchableOpacity
+                  style={styles.chatActionItem}
+                  onPress={() => {
+                    if (menuTargetChat) handleDeleteChat(menuTargetChat.id);
+                    setMenuTargetChat(null);
+                  }}
+                >
+                  <Text style={styles.chatActionTextDanger}>{t("chatList.deleteOption")}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.chatActionItem}
+                  onPress={() => {
+                    if (menuTargetChat) handleLeaveChat(menuTargetChat.id);
+                    setMenuTargetChat(null);
+                  }}
+                >
+                  <Text style={styles.chatActionText}>{t("chatList.leaveOption")}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.chatActionCancel} onPress={() => setMenuTargetChat(null)}>
+                  <Text style={styles.chatActionCancelText}>{t("chatList.cancelOption")}</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -434,5 +454,46 @@ const styles = StyleSheet.create({
   },
   chatMenuButton: {
     paddingLeft: 8,
+  },
+  chatMenuIcon: {
+    fontSize: 18,
+    color: "#999",
+  },
+  // ===== 削除・退会メニュー（自作Modal）のスタイル =====
+  chatActionOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  chatActionSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 30,
+  },
+  chatActionItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#eee",
+    alignItems: "center",
+  },
+  chatActionText: {
+    fontSize: 15,
+    color: "#333",
+  },
+  chatActionTextDanger: {
+    fontSize: 15,
+    color: "#e74c3c",
+  },
+  chatActionCancel: {
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  chatActionCancelText: {
+    fontSize: 15,
+    color: "#999",
+    fontWeight: "600",
   },
 });

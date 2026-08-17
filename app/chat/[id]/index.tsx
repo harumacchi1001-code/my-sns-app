@@ -1,15 +1,14 @@
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { addDoc, arrayRemove, collection, deleteDoc, doc, DocumentData, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -22,9 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import StampFrame from "../../../components/StampFrame";
 import { auth, db } from "../../../firebaseConfig";
 type Message = DocumentData & { id: string };
-
 const DAY_MS = 24 * 60 * 60 * 1000;
-
 export default function ChatDetailScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,10 +32,10 @@ export default function ChatDetailScreen() {
   const [userMap, setUserMap] = useState<Record<string, DocumentData>>({});
   const [sharedPosts, setSharedPosts] = useState<Record<string, DocumentData>>({});
   const [loading, setLoading] = useState(true);
-
+  // ===== 削除・退会・キャンセルの、自作メニューの表示状態 =====
+  const [showChatMenu, setShowChatMenu] = useState(false);
   // ===== ストーリー関連の状態 =====
   const [stories, setStories] = useState<DocumentData[]>([]);
-
   useEffect(() => {
     if (!id) return;
     const unsubscribe = onSnapshot(doc(db, "chats", id), (docSnap) => {
@@ -77,7 +74,6 @@ export default function ChatDetailScreen() {
     });
     return unsubscribe;
   }, []);
-
   // ===== ストーリー一覧を取得 =====
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "stories"), (snapshot) => {
@@ -89,7 +85,6 @@ export default function ChatDetailScreen() {
     });
     return unsubscribe;
   }, []);
-
   useEffect(() => {
     const sharedIds = messages
       .filter((m) => m.sharedPostId)
@@ -129,7 +124,6 @@ export default function ChatDetailScreen() {
     };
     markAllAsRead();
   }, [id]);
-
   // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
   const getUserStories = (userId: string) => {
     const now = Date.now();
@@ -139,9 +133,7 @@ export default function ChatDetailScreen() {
       return now - createdMs < DAY_MS;
     });
   };
-
   const myUid = auth.currentUser?.uid;
-
   // ===== 相手のユーザーID・ストーリー情報 =====
   const getOtherUserInfo = () => {
     if (!chat || chat.isGroup) return { userId: undefined as string | undefined, userStories: [] as DocumentData[] };
@@ -152,7 +144,6 @@ export default function ChatDetailScreen() {
     const userStories = userId ? getUserStories(userId) : [];
     return { userId, userStories };
   };
-
   // ===== アイコンをタップしたときの動作：ストーリーがあれば閲覧画面、なければプロフィール =====
   const handleHeaderAvatarPress = () => {
     const { userId, userStories } = getOtherUserInfo();
@@ -163,7 +154,6 @@ export default function ChatDetailScreen() {
       router.push({ pathname: "/user/[id]", params: { id: userId } });
     }
   };
-
   const getChatTitle = () => {
     if (!chat) return "";
     if (chat.isGroup) return chat.groupName || t("chatDetail.group");
@@ -171,27 +161,19 @@ export default function ChatDetailScreen() {
     const otherEmail = chat.participants.find((p: string) => p !== myEmail);
     return userMap[otherEmail]?.username || otherEmail || t("chatDetail.unknownUser");
   };
+  // ===== 削除・退会の処理 =====
   const handleDeleteThisChat = async () => {
     if (!id) return;
+    setShowChatMenu(false);
     await deleteDoc(doc(db, "chats", id));
     router.back();
   };
   const handleLeaveThisChat = async () => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail || !id) return;
+    setShowChatMenu(false);
     await updateDoc(doc(db, "chats", id), { participants: arrayRemove(myEmail) });
     router.back();
-  };
-  const handleChatMenu = () => {
-    Alert.alert(
-      getChatTitle(),
-      "この操作を選んでください",
-      [
-        { text: "削除", style: "destructive", onPress: handleDeleteThisChat },
-        { text: "退会", onPress: handleLeaveThisChat },
-        { text: "キャンセル", style: "cancel" },
-      ]
-    );
   };
   const handleSend = async () => {
     if (!messageText.trim() || !id) return;
@@ -221,7 +203,6 @@ export default function ChatDetailScreen() {
   const chatMyEmailForPhoto = chat && !chat.isGroup
     ? userMap[chat.participants.find((p: string) => p !== myEmail)]?.photoUrl
     : null;
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
@@ -229,7 +210,6 @@ export default function ChatDetailScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>{t("chatDetail.backButton")}</Text>
           </TouchableOpacity>
-
           <View style={styles.headerCenter}>
             {chat && !chat.isGroup && (
               <TouchableOpacity onPress={handleHeaderAvatarPress}>
@@ -250,7 +230,6 @@ export default function ChatDetailScreen() {
             )}
             <Text style={styles.headerTitle}>{getChatTitle()}</Text>
           </View>
-
           <View style={styles.headerRightRow}>
             {chat?.isGroup && (
               <TouchableOpacity
@@ -259,8 +238,8 @@ export default function ChatDetailScreen() {
                 <Text style={styles.infoText}>{t("chatDetail.infoButton")}</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={handleChatMenu}>
-              <MaterialIcons name="menu" size={26} color="#222" />
+            <TouchableOpacity onPress={() => setShowChatMenu(true)}>
+              <Text style={styles.headerMenuIcon}>≡</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -329,6 +308,31 @@ export default function ChatDetailScreen() {
           </View>
         </KeyboardAvoidingView>
       </View>
+      {/* ===== 削除・退会・キャンセルの、自作メニュー（Alertはブラウザで機能しないため使わない） ===== */}
+      <Modal
+        visible={showChatMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowChatMenu(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowChatMenu(false)}>
+          <View style={styles.chatActionOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.chatActionSheet}>
+                <TouchableOpacity style={styles.chatActionItem} onPress={handleDeleteThisChat}>
+                  <Text style={styles.chatActionTextDanger}>削除</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.chatActionItem} onPress={handleLeaveThisChat}>
+                  <Text style={styles.chatActionText}>退会</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.chatActionCancel} onPress={() => setShowChatMenu(false)}>
+                  <Text style={styles.chatActionCancelText}>キャンセル</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -385,6 +389,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+  },
+  headerMenuIcon: {
+    fontSize: 22,
+    color: "#222",
   },
   messageList: {
     padding: 16,
@@ -470,6 +478,43 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     color: "#4a90e2",
+    fontWeight: "600",
+  },
+  // ===== 削除・退会メニュー（自作Modal）のスタイル =====
+  chatActionOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  chatActionSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 30,
+  },
+  chatActionItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#eee",
+    alignItems: "center",
+  },
+  chatActionText: {
+    fontSize: 15,
+    color: "#333",
+  },
+  chatActionTextDanger: {
+    fontSize: 15,
+    color: "#e74c3c",
+  },
+  chatActionCancel: {
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  chatActionCancelText: {
+    fontSize: 15,
+    color: "#999",
     fontWeight: "600",
   },
 });
