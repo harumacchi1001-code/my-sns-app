@@ -1,3 +1,4 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import { arrayRemove, collection, collectionGroup, deleteDoc, doc, DocumentData, onSnapshot, orderBy, query, updateDoc, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -279,7 +280,14 @@ export default function ChatListScreen() {
                     </View>
                   )}
                 </View>
+              <TouchableOpacity
+                 style={styles.chatMenuButton}
+                 onPress={() => handleLongPress(item)}
+                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialIcons name="menu" size={20} color="#999" />
               </TouchableOpacity>
+            </TouchableOpacity>
             );
           }}
         />
@@ -423,5 +431,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "700",
+  },
+  chatMenuButton: {
+    paddingLeft: 8,
   },
 });

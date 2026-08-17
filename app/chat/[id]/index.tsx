@@ -1,9 +1,11 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { addDoc, collection, doc, DocumentData, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
+import { addDoc, arrayRemove, collection, deleteDoc, doc, DocumentData, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Keyboard,
@@ -169,6 +171,28 @@ export default function ChatDetailScreen() {
     const otherEmail = chat.participants.find((p: string) => p !== myEmail);
     return userMap[otherEmail]?.username || otherEmail || t("chatDetail.unknownUser");
   };
+  const handleDeleteThisChat = async () => {
+    if (!id) return;
+    await deleteDoc(doc(db, "chats", id));
+    router.back();
+  };
+  const handleLeaveThisChat = async () => {
+    const myEmail = auth.currentUser?.email;
+    if (!myEmail || !id) return;
+    await updateDoc(doc(db, "chats", id), { participants: arrayRemove(myEmail) });
+    router.back();
+  };
+  const handleChatMenu = () => {
+    Alert.alert(
+      getChatTitle(),
+      "この操作を選んでください",
+      [
+        { text: "削除", style: "destructive", onPress: handleDeleteThisChat },
+        { text: "退会", onPress: handleLeaveThisChat },
+        { text: "キャンセル", style: "cancel" },
+      ]
+    );
+  };
   const handleSend = async () => {
     if (!messageText.trim() || !id) return;
     const myEmail = auth.currentUser?.email;
@@ -227,15 +251,18 @@ export default function ChatDetailScreen() {
             <Text style={styles.headerTitle}>{getChatTitle()}</Text>
           </View>
 
-          {chat?.isGroup ? (
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: "/chat/[id]/info", params: { id: id as string } })}
-            >
-              <Text style={styles.infoText}>{t("chatDetail.infoButton")}</Text>
+          <View style={styles.headerRightRow}>
+            {chat?.isGroup && (
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: "/chat/[id]/info", params: { id: id as string } })}
+              >
+                <Text style={styles.infoText}>{t("chatDetail.infoButton")}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleChatMenu}>
+              <MaterialIcons name="menu" size={26} color="#222" />
             </TouchableOpacity>
-          ) : (
-            <View style={{ width: 40 }} />
-          )}
+          </View>
         </View>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -353,6 +380,11 @@ const styles = StyleSheet.create({
   infoText: {
     color: "#4a90e2",
     fontSize: 14,
+  },
+  headerRightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
   messageList: {
     padding: 16,

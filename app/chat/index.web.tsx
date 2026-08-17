@@ -1,6 +1,7 @@
 // ===== ここからWeb版専用ファイル =====
 // 画面幅が広いとき（768px以上）は、左に会話一覧・右にトークを表示する2カラムレイアウトにする。
 // 画面幅が狭いとき（スマホでWebを見ている場合）は、これまでどおり「一覧→タップで別画面」の動きにする。
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import {
     addDoc,
@@ -34,35 +35,29 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import StampFrame from "../../components/StampFrame";
 import { auth, db } from "../../firebaseConfig";
-
 type Chat = DocumentData & { id: string };
 type Message = DocumentData & { id: string };
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 // ===== ここからWeb版専用：2カラムに切り替える、画面幅のしきい値 =====
 const MOBILE_BREAKPOINT = 768;
 const LIST_COLUMN_WIDTH = 360;
 // ===== ここまでWeb版専用 =====
-
 export default function ChatWebScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isNarrowWidth = width < MOBILE_BREAKPOINT;
-
   // ===== 一覧まわりの状態（既存 index.tsx と同じ） =====
   const [chats, setChats] = useState<Chat[]>([]);
   const [userMap, setUserMap] = useState<Record<string, DocumentData>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [stories, setStories] = useState<DocumentData[]>([]);
   const [loadingList, setLoadingList] = useState(true);
-
   // ===== ここからWeb版専用：選択中の会話ID（2カラムのとき、右側に表示する会話） =====
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   // ===== ここまでWeb版専用 =====
   // ===== 「すべて／個人／グループ」の、タブの選択状態 =====
   const [activeChatTab, setActiveChatTab] = useState<"all" | "individual" | "group">("all");
-
   useEffect(() => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail) return;
@@ -81,7 +76,6 @@ export default function ChatWebScreen() {
     });
     return unsubscribe;
   }, []);
-
   useEffect(() => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail || chats.length === 0) {
@@ -105,7 +99,6 @@ export default function ChatWebScreen() {
     });
     return unsubscribe;
   }, [chats]);
-
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
       const map: Record<string, DocumentData> = {};
@@ -119,7 +112,6 @@ export default function ChatWebScreen() {
     });
     return unsubscribe;
   }, []);
-
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "stories"), (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
@@ -130,7 +122,6 @@ export default function ChatWebScreen() {
     });
     return unsubscribe;
   }, []);
-
   const getUserStories = (userId: string) => {
     const now = Date.now();
     return stories.filter((s) => {
@@ -139,9 +130,7 @@ export default function ChatWebScreen() {
       return now - createdMs < DAY_MS;
     });
   };
-
   const myUid = auth.currentUser?.uid;
-
   const handleAvatarPress = (userId: string | undefined) => {
     if (!userId) return;
     const userStories = getUserStories(userId);
@@ -151,7 +140,6 @@ export default function ChatWebScreen() {
       router.push({ pathname: "/user/[id]", params: { id: userId } });
     }
   };
-
   const getChatDisplayInfo = (chat: Chat) => {
     const myEmail = auth.currentUser?.email;
     if (chat.isGroup) {
@@ -169,20 +157,17 @@ export default function ChatWebScreen() {
       userId: otherUser?.id as string | undefined,
     };
   };
-
   const formatDate = (timestamp: any) => {
     if (!timestamp?.toDate) return "";
     const date = timestamp.toDate();
     return `${date.getMonth() + 1}/${date.getDate()}`;
   };
-
   const handleDeleteChat = async (chatId: string) => {
     await deleteDoc(doc(db, "chats", chatId));
     // ===== ここからWeb版専用：削除した会話が選択中だった場合、選択を解除 =====
     setSelectedChatId((current) => (current === chatId ? null : current));
     // ===== ここまでWeb版専用 =====
   };
-
   const handleLeaveChat = async (chatId: string) => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail) return;
@@ -191,7 +176,6 @@ export default function ChatWebScreen() {
     });
     setSelectedChatId((current) => (current === chatId ? null : current));
   };
-
   const handleLongPress = (chat: Chat) => {
     const info = getChatDisplayInfo(chat);
     Alert.alert(
@@ -214,7 +198,6 @@ export default function ChatWebScreen() {
       ]
     );
   };
-
   // ===== ここからWeb版専用：会話をクリックしたときの動作 =====
   const handleSelectChat = (chatId: string) => {
     if (isNarrowWidth) {
@@ -224,14 +207,12 @@ export default function ChatWebScreen() {
     }
   };
   // ===== ここまでWeb版専用 =====
-
   // ===== 選択中のタブに応じて、会話を絞り込む =====
   const filteredChats = chats.filter((chat) => {
     if (activeChatTab === "individual") return !chat.isGroup;
     if (activeChatTab === "group") return !!chat.isGroup;
     return true;
   });
-
   const renderListPane = () => (
     <View style={isNarrowWidth ? styles.listPaneFull : styles.listPane}>
       <View style={styles.header}>
@@ -332,6 +313,13 @@ export default function ChatWebScreen() {
                     </View>
                   )}
                 </View>
+                <TouchableOpacity
+                  style={styles.chatMenuButton}
+                  onPress={() => handleLongPress(item)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <MaterialIcons name="menu" size={20} color="#999" />
+                </TouchableOpacity>
               </TouchableOpacity>
             );
           }}
@@ -339,7 +327,6 @@ export default function ChatWebScreen() {
       )}
     </View>
   );
-
   // ===== 幅が狭い場合は、これまでどおり一覧のみ（タップで別画面へ遷移） =====
   if (isNarrowWidth) {
     return (
@@ -348,7 +335,6 @@ export default function ChatWebScreen() {
       </SafeAreaView>
     );
   }
-
   // ===== ここから、幅が広い場合の、2カラムレイアウト =====
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -361,6 +347,7 @@ export default function ChatWebScreen() {
               chatId={selectedChatId}
               stories={stories}
               userMap={userMap}
+              onChatRemoved={() => setSelectedChatId(null)}
             />
           ) : (
             <View style={styles.emptyDetailContainer}>
@@ -372,16 +359,17 @@ export default function ChatWebScreen() {
     </SafeAreaView>
   );
 }
-
 // ===== ここからWeb版専用：右カラムに表示する、個別チャットの中身 =====
 function ChatDetailPane({
   chatId,
   stories,
   userMap,
+  onChatRemoved,
 }: {
   chatId: string;
   stories: DocumentData[];
   userMap: Record<string, DocumentData>;
+  onChatRemoved?: () => void;
 }) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -390,7 +378,6 @@ function ChatDetailPane({
   const [messageText, setMessageText] = useState("");
   const [sharedPosts, setSharedPosts] = useState<Record<string, DocumentData>>({});
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "chats", chatId), (docSnap) => {
       if (docSnap.exists()) {
@@ -400,7 +387,6 @@ function ChatDetailPane({
     });
     return unsubscribe;
   }, [chatId]);
-
   useEffect(() => {
     const q = query(
       collection(db, "chats", chatId, "messages"),
@@ -415,7 +401,6 @@ function ChatDetailPane({
     });
     return unsubscribe;
   }, [chatId]);
-
   useEffect(() => {
     const sharedIds = messages
       .filter((m) => m.sharedPostId)
@@ -431,7 +416,6 @@ function ChatDetailPane({
       });
     });
   }, [messages]);
-
   useEffect(() => {
     const markAllAsRead = async () => {
       const myEmail = auth.currentUser?.email;
@@ -455,7 +439,6 @@ function ChatDetailPane({
     };
     markAllAsRead();
   }, [chatId]);
-
   const getUserStories = (userId: string) => {
     const now = Date.now();
     return stories.filter((s) => {
@@ -464,9 +447,7 @@ function ChatDetailPane({
       return now - createdMs < DAY_MS;
     });
   };
-
   const myUid = auth.currentUser?.uid;
-
   const getOtherUserInfo = () => {
     if (!chat || chat.isGroup) return { userId: undefined as string | undefined, userStories: [] as DocumentData[] };
     const myEmail = auth.currentUser?.email;
@@ -476,7 +457,6 @@ function ChatDetailPane({
     const userStories = userId ? getUserStories(userId) : [];
     return { userId, userStories };
   };
-
   const handleHeaderAvatarPress = () => {
     const { userId, userStories } = getOtherUserInfo();
     if (!userId) return;
@@ -486,7 +466,6 @@ function ChatDetailPane({
       router.push({ pathname: "/user/[id]", params: { id: userId } });
     }
   };
-
   const getChatTitle = () => {
     if (!chat) return "";
     if (chat.isGroup) return chat.groupName || t("chatDetail.group");
@@ -494,7 +473,29 @@ function ChatDetailPane({
     const otherEmail = chat.participants.find((p: string) => p !== myEmail);
     return userMap[otherEmail]?.username || otherEmail || t("chatDetail.unknownUser");
   };
-
+  // ===== ここから、三本線メニューの処理 =====
+  const handleDeleteThisChat = async () => {
+    await deleteDoc(doc(db, "chats", chatId));
+    onChatRemoved?.();
+  };
+  const handleLeaveThisChat = async () => {
+    const myEmail = auth.currentUser?.email;
+    if (!myEmail) return;
+    await updateDoc(doc(db, "chats", chatId), { participants: arrayRemove(myEmail) });
+    onChatRemoved?.();
+  };
+  const handleChatMenu = () => {
+    Alert.alert(
+      getChatTitle(),
+      "この操作を選んでください",
+      [
+        { text: "削除", style: "destructive", onPress: handleDeleteThisChat },
+        { text: "退会", onPress: handleLeaveThisChat },
+        { text: "キャンセル", style: "cancel" },
+      ]
+    );
+  };
+  // ===== ここまで =====
   const handleSend = async () => {
     if (!messageText.trim()) return;
     const myEmail = auth.currentUser?.email;
@@ -510,7 +511,6 @@ function ChatDetailPane({
     });
     setMessageText("");
   };
-
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -518,14 +518,12 @@ function ChatDetailPane({
       </View>
     );
   }
-
   const myEmail = auth.currentUser?.email;
   const { userId: otherUserId, userStories: otherUserStories } = getOtherUserInfo();
   const otherHasUnread = otherUserStories.some((s) => !(s.viewedBy || []).includes(myUid));
   const chatMyEmailForPhoto = chat && !chat.isGroup
     ? userMap[chat.participants.find((p: string) => p !== myEmail)]?.photoUrl
     : null;
-
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.header}>
@@ -549,15 +547,18 @@ function ChatDetailPane({
           )}
           <Text style={styles.headerTitle}>{getChatTitle()}</Text>
         </View>
-        {chat?.isGroup ? (
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: "/chat/[id]/info", params: { id: chatId } })}
-          >
-            <Text style={styles.infoText}>{t("chatDetail.infoButton")}</Text>
+        <View style={styles.headerRightRow}>
+          {chat?.isGroup && (
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: "/chat/[id]/info", params: { id: chatId } })}
+            >
+              <Text style={styles.infoText}>{t("chatDetail.infoButton")}</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={handleChatMenu}>
+            <MaterialIcons name="menu" size={24} color="#222" />
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 40 }} />
-        )}
+        </View>
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
         <FlatList
@@ -622,7 +623,6 @@ function ChatDetailPane({
   );
 }
 // ===== ここまでWeb版専用 =====
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -688,6 +688,11 @@ const styles = StyleSheet.create({
   infoText: {
     color: "#4a90e2",
     fontSize: 14,
+  },
+  headerRightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
   newChatText: {
     color: "#4a90e2",
@@ -780,6 +785,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "700",
+  },
+  chatMenuButton: {
+    paddingLeft: 8,
   },
   messageList: {
     padding: 16,
