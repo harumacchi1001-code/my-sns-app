@@ -210,7 +210,19 @@ export default function WebSidebar() {
       </Animated.View>
       {/* ===== ここまでWeb版専用 ===== */}
       {showSettingsSubMenu && (
-        <View style={styles.settingsSubSidebar}>
+        <View
+          style={styles.settingsSubSidebar}
+          {...({
+            onMouseEnter: () => {
+              handleWholeAreaMouseEnter();
+              handleSettingsMouseEnter();
+            },
+            onMouseLeave: () => {
+              handleWholeAreaMouseLeave();
+              handleSettingsMouseLeave();
+            },
+          } as any)}
+        >
           {SETTINGS_SUB_ITEMS.map((sub) => (
             <TouchableOpacity
               key={sub.key}

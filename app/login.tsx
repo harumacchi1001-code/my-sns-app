@@ -1,7 +1,12 @@
 import { useRouter } from "expo-router";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import {
+    GoogleAuthProvider,
+    getRedirectResult,
+    signInWithEmailAndPassword,
+    signInWithRedirect,
+} from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
     Keyboard,
@@ -28,6 +33,43 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // ===== ここからWeb版専用：Googleログイン（リダイレクト方式）から、戻ってきたときの処理 =====
+  useEffect(() => {
+    if (!isWeb) return;
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (!result) return;
+
+        const uid = result.user.uid;
+        const userDocRef = doc(db, "users", uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (!userDocSnap.exists()) {
+          await setDoc(userDocRef, {
+            email: result.user.email || "",
+            username: result.user.displayName || "",
+            photoUrl: result.user.photoURL || "",
+            bio: "",
+            snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
+            following: [],
+            followers: [],
+          });
+          router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
+        } else {
+          router.replace("/(tabs)");
+        }
+      } catch (error: any) {
+        if (error?.code) {
+          console.log("Googleログインエラー:", error.message);
+          alert("Googleログインに失敗しました: " + error.message);
+        }
+      }
+    };
+    checkRedirectResult();
+  }, []);
+  // ===== ここまでWeb版専用 =====
+
   const handleLogin = async () => {
     try {
       // ===== 入力前チェック：見えない全角文字・空白を、自動で整える =====
@@ -40,35 +82,11 @@ export default function LoginScreen() {
     }
   };
 
-  // ===== ここからWeb版専用：Googleログイン ===== 
+  // ===== ここからWeb版専用：Googleログイン（リダイレクト方式） ===== 
   const handleGoogleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const uid = result.user.uid;
-
-      // ===== 初めてのログインの場合は、ユーザー情報を新規作成する =====
-      const userDocRef = doc(db, "users", uid);
-      const userDocSnap = await getDoc(userDocRef);
-
-      if (!userDocSnap.exists()) {
-        await setDoc(userDocRef, {
-          email: result.user.email || "",
-          username: result.user.displayName || "",
-          photoUrl: result.user.photoURL || "",
-          bio: "",
-          snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
-          following: [],
-          followers: [],
-        });
-        router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
-      } else {
-        router.replace("/(tabs)");
-      }
-    } catch (error: any) {
-      console.log("Googleログインエラー:", error.message);
-      alert("Googleログインに失敗しました: " + error.message);
-    }
+    const provider = new GoogleAuthProvider();
+    await signInWithRedirect(auth, provider);
+    // ===== ここから先の処理は、リダイレクトして戻ってきた後、useEffectの中で行う =====
   };
   // ===== ここまでWeb版専用 =====
 
