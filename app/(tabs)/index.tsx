@@ -17,6 +17,7 @@ import {
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,6 +28,8 @@ import { auth, db } from "../../firebaseConfig";
 type Post = DocumentData & { id: string };
 // ===== ここからWeb版専用 =====
 const isWeb = Platform.OS === "web";
+// ===== _layout.web.tsx と同じ、しきい値 =====
+const MOBILE_BREAKPOINT = 768;
 // ===== ここまでWeb版専用 =====
 // 直近1週間で、この件数以上の閲覧記録があれば、「今の興味」を優先する
 const RECENT_ACTIVITY_THRESHOLD = 10;
@@ -36,6 +39,10 @@ const DEFAULT_THUMBNAIL_RATIO = 16 / 9;
 export default function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  // ===== ここからWeb版専用：画面幅が狭いときは、Web版でもチャットアイコンを表示するために使う =====
+  const { width } = useWindowDimensions();
+  const isNarrowWidth = width < MOBILE_BREAKPOINT;
+  // ===== ここまでWeb版専用 =====
   // ===== ここからWeb版専用：サイドバーから渡される、tabパラメータを受け取る =====
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   // ===== ここまでWeb版専用 =====
@@ -436,8 +443,9 @@ export default function HomeScreen() {
           <TouchableOpacity onPress={handleHomePress}>
             <Text style={styles.header}>{t("home.title")}</Text>
           </TouchableOpacity>
-          {/* ===== ここからWeb版専用（右上に共通の固定ボタンがあるため、Web版ではここに表示しない） ===== */}
-          {!isWeb && (
+          {/* ===== ここからWeb版専用（パソコン幅のWeb版は、右上に共通の固定ボタンがあるため非表示。
+                スマホ幅のWeb版・アプリ版では、ここに表示する） ===== */}
+          {(!isWeb || isNarrowWidth) && (
             <TouchableOpacity style={styles.chatIconWrapper} onPress={() => router.push("/chat")}>
               <MaterialIcons name="send" size={24} color="#222" />
               {totalUnreadCount > 0 && (
@@ -451,76 +459,6 @@ export default function HomeScreen() {
           )}
           {/* ===== ここまでWeb版専用 ===== */}
         </View>
-        {/* ===== ストーリー一覧行（切手風デザイン） ===== */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.storyRow}
-          contentContainerStyle={styles.storyRowContent}
-        >
-          {/* 自分のストーリー枠：まだ見ていないストーリーがあれば、グラデーション枠を表示 */}
-          <View style={styles.storyItem}>
-            <TouchableOpacity onPress={openMyStory} activeOpacity={0.85}>
-              <StampFrame
-                size={90}
-                imageUri={myUserData?.photoUrl || null}
-                borderColor="#888"
-                frameThickness={storyGroups.mine.length > 0 && myHasUnread ? 6 : 2}
-                gradientColors={
-                  storyGroups.mine.length > 0 && myHasUnread ? ["#3D8BFF", "#7B3DFF"] : undefined
-                }
-              />
-              <TouchableOpacity style={styles.plusBadge} onPress={() => router.push("/story-create")}>
-                <MaterialIcons name="add" size={14} color="#fff" />
-              </TouchableOpacity>
-            </TouchableOpacity>
-            <Text style={styles.storyLabel} numberOfLines={1}>
-              あなた
-            </Text>
-          </View>
-          {/* フォロー中の人のストーリー：常に、その人のプロフィール画像を表示 */}
-          {storyGroups.others.map(({ authorId, hasUnread }) => {
-            const author = Object.values(userMap).find((u: any) => u.id === authorId) as
-              | DocumentData
-              | undefined;
-            return (
-              <View key={authorId} style={styles.storyItem}>
-                <TouchableOpacity onPress={() => openOtherStory(authorId)} activeOpacity={0.85}>
-                  <StampFrame
-                    size={90}
-                    imageUri={author?.photoUrl || null}
-                    borderColor="#888"
-                    gradientColors={hasUnread ? ["#3D8BFF", "#7B3DFF"] : undefined}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.storyLabel} numberOfLines={1}>
-                  {author?.handle || author?.username || "unknown"}
-                </Text>
-              </View>
-            );
-          })}
-        </ScrollView>
-        {/* ===== おすすめ／フォロー中の切り替えタブ（Web版では、サイドバーから選ぶため、非表示） ===== */}
-        {!isWeb && (
-          <View style={styles.feedModeRow}>
-            <TouchableOpacity
-              style={[styles.feedModeButton, feedMode === "recommended" && styles.feedModeButtonActive]}
-              onPress={() => setFeedMode("recommended")}
-            >
-              <Text style={feedMode === "recommended" ? styles.feedModeTextActive : styles.feedModeText}>
-                おすすめ
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.feedModeButton, feedMode === "following" && styles.feedModeButtonActive]}
-              onPress={() => setFeedMode("following")}
-            >
-              <Text style={feedMode === "following" ? styles.feedModeTextActive : styles.feedModeText}>
-                フォロー中
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
         <FlatList
           ref={flatListRef}
           data={displayedPosts}
@@ -528,6 +466,80 @@ export default function HomeScreen() {
           style={styles.list}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+          ListHeaderComponent={
+            <>
+              {/* ===== ストーリー一覧行（切手風デザイン） ===== */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.storyRow}
+                contentContainerStyle={styles.storyRowContent}
+              >
+                {/* 自分のストーリー枠：まだ見ていないストーリーがあれば、グラデーション枠を表示 */}
+                <View style={styles.storyItem}>
+                  <TouchableOpacity onPress={openMyStory} activeOpacity={0.85}>
+                    <StampFrame
+                      size={90}
+                      imageUri={myUserData?.photoUrl || null}
+                      borderColor="#888"
+                      frameThickness={storyGroups.mine.length > 0 && myHasUnread ? 6 : 2}
+                      gradientColors={
+                        storyGroups.mine.length > 0 && myHasUnread ? ["#3D8BFF", "#7B3DFF"] : undefined
+                      }
+                    />
+                    <TouchableOpacity style={styles.plusBadge} onPress={() => router.push("/story-create")}>
+                      <MaterialIcons name="add" size={14} color="#fff" />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                  <Text style={styles.storyLabel} numberOfLines={1}>
+                    あなた
+                  </Text>
+                </View>
+                {/* フォロー中の人のストーリー：常に、その人のプロフィール画像を表示 */}
+                {storyGroups.others.map(({ authorId, hasUnread }) => {
+                  const author = Object.values(userMap).find((u: any) => u.id === authorId) as
+                    | DocumentData
+                    | undefined;
+                  return (
+                    <View key={authorId} style={styles.storyItem}>
+                      <TouchableOpacity onPress={() => openOtherStory(authorId)} activeOpacity={0.85}>
+                        <StampFrame
+                          size={90}
+                          imageUri={author?.photoUrl || null}
+                          borderColor="#888"
+                          gradientColors={hasUnread ? ["#3D8BFF", "#7B3DFF"] : undefined}
+                        />
+                      </TouchableOpacity>
+                      <Text style={styles.storyLabel} numberOfLines={1}>
+                        {author?.handle || author?.username || "unknown"}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              {/* ===== おすすめ／フォロー中の切り替えタブ（Web版では、サイドバーから選ぶため、非表示） ===== */}
+              {!isWeb && (
+                <View style={styles.feedModeRow}>
+                  <TouchableOpacity
+                    style={[styles.feedModeButton, feedMode === "recommended" && styles.feedModeButtonActive]}
+                    onPress={() => setFeedMode("recommended")}
+                  >
+                    <Text style={feedMode === "recommended" ? styles.feedModeTextActive : styles.feedModeText}>
+                      おすすめ
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.feedModeButton, feedMode === "following" && styles.feedModeButtonActive]}
+                    onPress={() => setFeedMode("following")}
+                  >
+                    <Text style={feedMode === "following" ? styles.feedModeTextActive : styles.feedModeText}>
+                      フォロー中
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
           }
           ListEmptyComponent={
             <View style={styles.centerContainer}>
