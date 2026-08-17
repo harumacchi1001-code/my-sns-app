@@ -29,6 +29,9 @@ export default function ChatListScreen() {
   const [activeChatTab, setActiveChatTab] = useState<"all" | "individual" | "group">("all");
   // ===== 削除・退会メニューの、対象チャット（Modalで表示） =====
   const [menuTargetChat, setMenuTargetChat] = useState<Chat | null>(null);
+  // ===== Web版専用：ポップアップの表示位置 =====
+  const [menuPosition, setMenuPosition] = useState({ top: 100, left: 100 });
+  const isWeb = Platform.OS === "web";
   // ===== ストーリー関連の状態 =====
   const [stories, setStories] = useState<DocumentData[]>([]);
   useEffect(() => {
@@ -155,7 +158,12 @@ export default function ChatListScreen() {
     return true;
   });
   // ===== 三本線・長押しどちらでも、メニューを開く =====
-  const openChatMenu = (chat: Chat) => {
+  const openChatMenu = (chat: Chat, event?: any) => {
+    if (isWeb && event) {
+      const pageX = event?.nativeEvent?.pageX ?? 100;
+      const pageY = event?.nativeEvent?.pageY ?? 100;
+      setMenuPosition({ top: pageY + 10, left: pageX - 180 });
+    }
     setMenuTargetChat(chat);
   };
   if (loading) {
@@ -265,7 +273,7 @@ export default function ChatListScreen() {
                 </View>
                 <TouchableOpacity
                   style={styles.chatMenuButton}
-                  onPress={() => openChatMenu(item)}
+                  onPress={(event) => openChatMenu(item, event)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Text style={styles.chatMenuIcon}>≡</Text>
@@ -275,7 +283,7 @@ export default function ChatListScreen() {
           }}
         />
       </View>
-      {/* ===== 削除・退会・キャンセルの、自作メニュー（Alertはブラウザで機能しないため使わない） ===== */}
+      {/* ===== 削除・退会・キャンセルの、自作メニュー（Web版はポップアップ、アプリ版はシート） ===== */}
       <Modal
         visible={!!menuTargetChat}
         transparent
@@ -283,11 +291,17 @@ export default function ChatListScreen() {
         onRequestClose={() => setMenuTargetChat(null)}
       >
         <TouchableWithoutFeedback onPress={() => setMenuTargetChat(null)}>
-          <View style={styles.chatActionOverlay}>
+          <View style={isWeb ? styles.chatActionOverlayWeb : styles.chatActionOverlay}>
             <TouchableWithoutFeedback>
-              <View style={styles.chatActionSheet}>
+              <View
+                style={
+                  isWeb
+                    ? [styles.chatActionPopup, { top: menuPosition.top, left: menuPosition.left }]
+                    : styles.chatActionSheet
+                }
+              >
                 <TouchableOpacity
-                  style={styles.chatActionItem}
+                  style={isWeb ? styles.chatActionItemWeb : styles.chatActionItem}
                   onPress={() => {
                     if (menuTargetChat) handleDeleteChat(menuTargetChat.id);
                     setMenuTargetChat(null);
@@ -296,7 +310,7 @@ export default function ChatListScreen() {
                   <Text style={styles.chatActionTextDanger}>{t("chatList.deleteOption")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.chatActionItem}
+                  style={isWeb ? styles.chatActionItemWeb : styles.chatActionItem}
                   onPress={() => {
                     if (menuTargetChat) handleLeaveChat(menuTargetChat.id);
                     setMenuTargetChat(null);
@@ -304,9 +318,11 @@ export default function ChatListScreen() {
                 >
                   <Text style={styles.chatActionText}>{t("chatList.leaveOption")}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.chatActionCancel} onPress={() => setMenuTargetChat(null)}>
-                  <Text style={styles.chatActionCancelText}>{t("chatList.cancelOption")}</Text>
-                </TouchableOpacity>
+                {!isWeb && (
+                  <TouchableOpacity style={styles.chatActionCancel} onPress={() => setMenuTargetChat(null)}>
+                    <Text style={styles.chatActionCancelText}>{t("chatList.cancelOption")}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -459,7 +475,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#999",
   },
-  // ===== 削除・退会メニュー（自作Modal）のスタイル =====
+  // ===== 削除・退会メニュー（アプリ版：Modal下シート）のスタイル =====
   chatActionOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -495,5 +511,28 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#999",
     fontWeight: "600",
+  },
+  // ===== Web版専用：ポップアップ形式のスタイル =====
+  chatActionOverlayWeb: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.2)",
+  },
+  chatActionPopup: {
+    position: "absolute",
+    width: 180,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#eee",
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  chatActionItemWeb: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
 });

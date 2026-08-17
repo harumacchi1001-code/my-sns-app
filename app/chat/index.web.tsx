@@ -1,6 +1,7 @@
 // ===== ここからWeb版専用ファイル =====
 // 画面幅が広いとき（768px以上）は、左に会話一覧・右にトークを表示する2カラムレイアウトにする。
 // 画面幅が狭いとき（スマホでWebを見ている場合）は、これまでどおり「一覧→タップで別画面」の動きにする。
+// このファイルは常にWeb版でのみ使われるため、削除・退会メニューは常にポップアップ形式で表示する。
 import { useRouter } from "expo-router";
 import {
     addDoc,
@@ -58,8 +59,9 @@ export default function ChatWebScreen() {
   // ===== ここまでWeb版専用 =====
   // ===== 「すべて／個人／グループ」の、タブの選択状態 =====
   const [activeChatTab, setActiveChatTab] = useState<"all" | "individual" | "group">("all");
-  // ===== 一覧側の、削除・退会メニュー（自作Modal） =====
+  // ===== 一覧側の、削除・退会メニュー（ポップアップ） =====
   const [listMenuTargetChat, setListMenuTargetChat] = useState<Chat | null>(null);
+  const [listMenuPosition, setListMenuPosition] = useState({ top: 100, left: 100 });
   useEffect(() => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail) return;
@@ -179,7 +181,12 @@ export default function ChatWebScreen() {
     setSelectedChatId((current) => (current === chatId ? null : current));
   };
   // ===== 三本線・長押しどちらでも、一覧側のメニューを開く =====
-  const openListChatMenu = (chat: Chat) => {
+  const openListChatMenu = (chat: Chat, event?: any) => {
+    if (event) {
+      const pageX = event?.nativeEvent?.pageX ?? 100;
+      const pageY = event?.nativeEvent?.pageY ?? 100;
+      setListMenuPosition({ top: pageY + 10, left: pageX - 180 });
+    }
     setListMenuTargetChat(chat);
   };
   // ===== ここからWeb版専用：会話をクリックしたときの動作 =====
@@ -299,7 +306,7 @@ export default function ChatWebScreen() {
                 </View>
                 <TouchableOpacity
                   style={styles.chatMenuButton}
-                  onPress={() => openListChatMenu(item)}
+                  onPress={(event) => openListChatMenu(item, event)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Text style={styles.chatMenuIcon}>≡</Text>
@@ -311,48 +318,48 @@ export default function ChatWebScreen() {
       )}
     </View>
   );
+  // ===== 削除・退会・キャンセルの、ポップアップメニュー（一覧側、共通で使う） =====
+  const renderListActionMenu = () => (
+    <Modal
+      visible={!!listMenuTargetChat}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setListMenuTargetChat(null)}
+    >
+      <TouchableWithoutFeedback onPress={() => setListMenuTargetChat(null)}>
+        <View style={styles.chatActionOverlayWeb}>
+          <TouchableWithoutFeedback>
+            <View style={[styles.chatActionPopup, { top: listMenuPosition.top, left: listMenuPosition.left }]}>
+              <TouchableOpacity
+                style={styles.chatActionItemWeb}
+                onPress={() => {
+                  if (listMenuTargetChat) handleDeleteChat(listMenuTargetChat.id);
+                  setListMenuTargetChat(null);
+                }}
+              >
+                <Text style={styles.chatActionTextDanger}>{t("chatList.deleteOption")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.chatActionItemWeb}
+                onPress={() => {
+                  if (listMenuTargetChat) handleLeaveChat(listMenuTargetChat.id);
+                  setListMenuTargetChat(null);
+                }}
+              >
+                <Text style={styles.chatActionText}>{t("chatList.leaveOption")}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
   // ===== 幅が狭い場合は、これまでどおり一覧のみ（タップで別画面へ遷移） =====
   if (isNarrowWidth) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
         {renderListPane()}
-        {/* ===== 削除・退会・キャンセルの、自作メニュー ===== */}
-        <Modal
-          visible={!!listMenuTargetChat}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setListMenuTargetChat(null)}
-        >
-          <TouchableWithoutFeedback onPress={() => setListMenuTargetChat(null)}>
-            <View style={styles.chatActionOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.chatActionSheet}>
-                  <TouchableOpacity
-                    style={styles.chatActionItem}
-                    onPress={() => {
-                      if (listMenuTargetChat) handleDeleteChat(listMenuTargetChat.id);
-                      setListMenuTargetChat(null);
-                    }}
-                  >
-                    <Text style={styles.chatActionTextDanger}>{t("chatList.deleteOption")}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.chatActionItem}
-                    onPress={() => {
-                      if (listMenuTargetChat) handleLeaveChat(listMenuTargetChat.id);
-                      setListMenuTargetChat(null);
-                    }}
-                  >
-                    <Text style={styles.chatActionText}>{t("chatList.leaveOption")}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.chatActionCancel} onPress={() => setListMenuTargetChat(null)}>
-                    <Text style={styles.chatActionCancelText}>{t("chatList.cancelOption")}</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
+        {renderListActionMenu()}
       </SafeAreaView>
     );
   }
@@ -377,43 +384,7 @@ export default function ChatWebScreen() {
           )}
         </View>
       </View>
-      {/* ===== 削除・退会・キャンセルの、自作メニュー（一覧側） ===== */}
-      <Modal
-        visible={!!listMenuTargetChat}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setListMenuTargetChat(null)}
-      >
-        <TouchableWithoutFeedback onPress={() => setListMenuTargetChat(null)}>
-          <View style={styles.chatActionOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.chatActionSheet}>
-                <TouchableOpacity
-                  style={styles.chatActionItem}
-                  onPress={() => {
-                    if (listMenuTargetChat) handleDeleteChat(listMenuTargetChat.id);
-                    setListMenuTargetChat(null);
-                  }}
-                >
-                  <Text style={styles.chatActionTextDanger}>{t("chatList.deleteOption")}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.chatActionItem}
-                  onPress={() => {
-                    if (listMenuTargetChat) handleLeaveChat(listMenuTargetChat.id);
-                    setListMenuTargetChat(null);
-                  }}
-                >
-                  <Text style={styles.chatActionText}>{t("chatList.leaveOption")}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.chatActionCancel} onPress={() => setListMenuTargetChat(null)}>
-                  <Text style={styles.chatActionCancelText}>{t("chatList.cancelOption")}</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      {renderListActionMenu()}
     </SafeAreaView>
   );
 }
@@ -436,8 +407,9 @@ function ChatDetailPane({
   const [messageText, setMessageText] = useState("");
   const [sharedPosts, setSharedPosts] = useState<Record<string, DocumentData>>({});
   const [loading, setLoading] = useState(true);
-  // ===== 削除・退会・キャンセルの、自作メニューの表示状態 =====
+  // ===== 削除・退会・キャンセルの、ポップアップメニューの表示状態 =====
   const [showChatMenu, setShowChatMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 60, left: 300 });
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "chats", chatId), (docSnap) => {
       if (docSnap.exists()) {
@@ -546,6 +518,15 @@ function ChatDetailPane({
     await updateDoc(doc(db, "chats", chatId), { participants: arrayRemove(myEmail) });
     onChatRemoved?.();
   };
+  // ===== 三本線ボタンから、タップ位置を受け取ってメニューを開く =====
+  const openChatMenu = (event?: any) => {
+    if (event) {
+      const pageX = event?.nativeEvent?.pageX ?? 300;
+      const pageY = event?.nativeEvent?.pageY ?? 60;
+      setMenuPosition({ top: pageY + 10, left: pageX - 180 });
+    }
+    setShowChatMenu(true);
+  };
   const handleSend = async () => {
     if (!messageText.trim()) return;
     const myEmail = auth.currentUser?.email;
@@ -605,7 +586,7 @@ function ChatDetailPane({
               <Text style={styles.infoText}>{t("chatDetail.infoButton")}</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={() => setShowChatMenu(true)}>
+          <TouchableOpacity onPress={(event) => openChatMenu(event)}>
             <Text style={styles.headerMenuIcon}>≡</Text>
           </TouchableOpacity>
         </View>
@@ -669,7 +650,7 @@ function ChatDetailPane({
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-      {/* ===== 削除・退会・キャンセルの、自作メニュー（右カラム側） ===== */}
+      {/* ===== 削除・退会・キャンセルの、ポップアップメニュー（右カラム側） ===== */}
       <Modal
         visible={showChatMenu}
         transparent
@@ -677,17 +658,14 @@ function ChatDetailPane({
         onRequestClose={() => setShowChatMenu(false)}
       >
         <TouchableWithoutFeedback onPress={() => setShowChatMenu(false)}>
-          <View style={styles.chatActionOverlay}>
+          <View style={styles.chatActionOverlayWeb}>
             <TouchableWithoutFeedback>
-              <View style={styles.chatActionSheet}>
-                <TouchableOpacity style={styles.chatActionItem} onPress={handleDeleteThisChat}>
+              <View style={[styles.chatActionPopup, { top: menuPosition.top, left: menuPosition.left }]}>
+                <TouchableOpacity style={styles.chatActionItemWeb} onPress={handleDeleteThisChat}>
                   <Text style={styles.chatActionTextDanger}>削除</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.chatActionItem} onPress={handleLeaveThisChat}>
+                <TouchableOpacity style={styles.chatActionItemWeb} onPress={handleLeaveThisChat}>
                   <Text style={styles.chatActionText}>退会</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.chatActionCancel} onPress={() => setShowChatMenu(false)}>
-                  <Text style={styles.chatActionCancelText}>キャンセル</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -958,24 +936,28 @@ const styles = StyleSheet.create({
     color: "#4a90e2",
     fontWeight: "600",
   },
-  // ===== 削除・退会メニュー（自作Modal）のスタイル =====
-  chatActionOverlay: {
+  // ===== ポップアップ形式のスタイル（このファイルは常にWebなので、常にこの形） =====
+  chatActionOverlayWeb: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.2)",
   },
-  chatActionSheet: {
+  chatActionPopup: {
+    position: "absolute",
+    width: 180,
     backgroundColor: "#fff",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingBottom: 30,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#eee",
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  chatActionItem: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
-    alignItems: "center",
+  chatActionItemWeb: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   chatActionText: {
     fontSize: 15,
@@ -984,16 +966,6 @@ const styles = StyleSheet.create({
   chatActionTextDanger: {
     fontSize: 15,
     color: "#e74c3c",
-  },
-  chatActionCancel: {
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  chatActionCancelText: {
-    fontSize: 15,
-    color: "#999",
-    fontWeight: "600",
   },
 });
 // ===== ここまでWeb版専用ファイル =====
