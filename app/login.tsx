@@ -1,7 +1,13 @@
 import { useRouter } from "expo-router";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import {
+    GoogleAuthProvider,
+    getRedirectResult,
+    signInWithEmailAndPassword,
+    signInWithPopup,
+    signInWithRedirect,
+} from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
     Keyboard,
@@ -28,6 +34,52 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // ===== ここからWeb版専用：スマホのブラウザかどうかを判定する =====
+  const isMobileBrowser = () => {
+    if (typeof navigator === "undefined") return false;
+    return /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+  };
+
+  // ===== Googleログイン後、共通で行う処理（新規か、既存か、で分岐する） =====
+  const handleGoogleUserResult = async (result: any) => {
+    const uid = result.user.uid;
+    const userDocRef = doc(db, "users", uid);
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (!userDocSnap.exists()) {
+      await setDoc(userDocRef, {
+        email: result.user.email || "",
+        username: result.user.displayName || "",
+        photoUrl: result.user.photoURL || "",
+        bio: "",
+        snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
+        following: [],
+        followers: [],
+      });
+      router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
+    } else {
+      router.replace("/(tabs)");
+    }
+  };
+
+  // ===== スマホの場合、リダイレクト方式で戻ってきたときの結果を確認する =====
+  useEffect(() => {
+    if (!isWeb) return;
+    if (!isMobileBrowser()) return;
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (!result) return;
+        await handleGoogleUserResult(result);
+      } catch (error: any) {
+        console.log("Googleログイン（リダイレクト）エラー:", error.message);
+        alert("Googleログインに失敗しました: " + error.message);
+      }
+    };
+    checkRedirectResult();
+  }, []);
+  // ===== ここまでWeb版専用 =====
+
   const handleLogin = async () => {
     try {
       // ===== 入力前チェック：見えない全角文字・空白を、自動で整える =====
@@ -40,30 +92,20 @@ export default function LoginScreen() {
     }
   };
 
-  // ===== ここからWeb版専用：Googleログイン ===== 
+  // ===== ここからWeb版専用：Googleログイン（スマホはリダイレクト、パソコンはポップアップ） ===== 
   const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+
+    if (isMobileBrowser()) {
+      // ===== スマホ：リダイレクト方式（この後は、上のuseEffectで結果を受け取る） =====
+      await signInWithRedirect(auth, provider);
+      return;
+    }
+
+    // ===== パソコン：ポップアップ方式 =====
     try {
-      const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      const uid = result.user.uid;
-
-      const userDocRef = doc(db, "users", uid);
-      const userDocSnap = await getDoc(userDocRef);
-
-      if (!userDocSnap.exists()) {
-        await setDoc(userDocRef, {
-          email: result.user.email || "",
-          username: result.user.displayName || "",
-          photoUrl: result.user.photoURL || "",
-          bio: "",
-          snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
-          following: [],
-          followers: [],
-        });
-        router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
-      } else {
-        router.replace("/(tabs)");
-      }
+      await handleGoogleUserResult(result);
     } catch (error: any) {
       console.log("Googleログインエラー:", error.message);
       alert("Googleログインに失敗しました: " + error.message);
