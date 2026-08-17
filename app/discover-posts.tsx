@@ -22,30 +22,27 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import StampFrame from "../components/StampFrame";
 import SwipeableCard from "../components/SwipeableCard";
 import { auth, db } from "../firebaseConfig";
-
 const DAILY_SWIPE_LIMIT = 99999;
-
 const DAY_MS = 24 * 60 * 60 * 1000;
-
+// ===== Web版・スマホ幅かどうかの判定に使う、しきい値 =====
+const MOBILE_BREAKPOINT = 768;
 type PostCandidate = DocumentData & { id: string };
-
 // 今日の日付を、"2026-8-7" のような文字列にする（1日ごとの上限管理に使う）
 const getTodayKey = () => {
   const now = new Date();
   return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 };
-
 // HTMLタグを取り除いた、プレーンテキストにする
 const stripHtml = (html: string) => {
   return (html || "").replace(/<[^>]+>/g, "");
 };
-
 // 本文の中から、最初の3文だけを取り出す
 const getFirstSentences = (html: string, count: number) => {
   const text = stripHtml(html).trim();
@@ -53,7 +50,6 @@ const getFirstSentences = (html: string, count: number) => {
   const sentences = text.split(/(?<=[。！？.!?])\s*/).filter((s) => s.trim().length > 0);
   return sentences.slice(0, count).join("");
 };
-
 // 投稿の、サムネイル＋本文中の画像を、まとめて1つの配列にする
 const getPostPhotos = (post: PostCandidate): string[] => {
   const photos: string[] = [];
@@ -65,35 +61,32 @@ const getPostPhotos = (post: PostCandidate): string[] => {
   }
   return photos;
 };
-
 export default function DiscoverPostsScreen() {
   const router = useRouter();
+  // ===== Web版・スマホ幅のときだけ、カードをコンパクトにするための判定 =====
+  const { width } = useWindowDimensions();
+  const isCompactWeb = Platform.OS === "web" && width < MOBILE_BREAKPOINT;
   const [loading, setLoading] = useState(true);
   const [candidates, setCandidates] = useState<PostCandidate[]>([]);
   const [authorMap, setAuthorMap] = useState<Record<string, DocumentData>>({});
   const [cardIndex, setCardIndex] = useState(0);
   const [swipeCountToday, setSwipeCountToday] = useState(0);
   const [processing, setProcessing] = useState(false);
-
   // ===== ストーリー関連の状態 =====
   const [stories, setStories] = useState<DocumentData[]>([]);
-
   useEffect(() => {
     const loadData = async () => {
       const myUid = auth.currentUser?.uid;
       const myEmail = auth.currentUser?.email;
       if (!myUid || !myEmail) return;
-
       // 今日、すでに何回スワイプしたかを確認する（ユーザー・投稿は共通の1日上限として扱う）
       const todayKey = getTodayKey();
       const limitDocSnap = await getDoc(doc(db, "swipeLimits", `${myUid}_${todayKey}`));
       const countSoFar = limitDocSnap.exists() ? limitDocSnap.data().count || 0 : 0;
       setSwipeCountToday(countSoFar);
-
       // 自分のフォロー中一覧を取得（非公開アカウントの判定に使う）
       const myDocSnap = await getDoc(doc(db, "users", myUid));
       const following: string[] = myDocSnap.exists() ? myDocSnap.data().following || [] : [];
-
       // 全ユーザー情報を取得し、著者情報・非公開判定・マイカード掲載投稿の判定に使う
       const usersSnap = await getDocs(collection(db, "users"));
       const usersById: Record<string, DocumentData> = {};
@@ -105,7 +98,6 @@ export default function DiscoverPostsScreen() {
           usersByEmail[data.email] = { id: docSnap.id, ...data };
         }
       });
-
       // マイカードに掲載されている投稿IDを、全ユーザー分まとめる
       const cardSelectedPostIds = new Set<string>();
       usersSnap.docs.forEach((docSnap) => {
@@ -113,7 +105,6 @@ export default function DiscoverPostsScreen() {
         const selectedIds: string[] = data.discoveryCard?.selectedPostIds || [];
         selectedIds.forEach((id) => cardSelectedPostIds.add(id));
       });
-
       // 今日、左スワイプ済みの投稿一覧を取得（優先順位を下げるために使う）
       const swipesSnap = await getDocs(collection(db, "swipes"));
       const leftSwipedToday: string[] = [];
@@ -128,14 +119,11 @@ export default function DiscoverPostsScreen() {
           leftSwipedToday.push(data.targetId);
         }
       });
-
       // 公開中の投稿を取得
       const postsQuery = query(collection(db, "posts"), where("status", "==", "published"));
       const postsSnap = await getDocs(postsQuery);
-
       const allCandidates = postsSnap.docs
         .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as PostCandidate[];
-
       // 自分自身の投稿・非公開かつ未フォローの人の投稿・
       // マイカードに掲載されていない投稿を除外
       const filteredCandidates = allCandidates.filter((post) => {
@@ -145,12 +133,10 @@ export default function DiscoverPostsScreen() {
         if (author?.isPrivate && !following.includes(author.id)) return false;
         return true;
       });
-
       // 「まだ見ていない投稿」と「今日、左スワイプ済みの投稿」に分け、
       // それぞれシャッフルしてから、未見の投稿を優先して繋げる
       const notYetSeen = filteredCandidates.filter((p) => !leftSwipedToday.includes(p.id));
       const alreadySeenToday = filteredCandidates.filter((p) => leftSwipedToday.includes(p.id));
-
       const shuffle = (arr: PostCandidate[]) => {
         const copy = [...arr];
         for (let i = copy.length - 1; i > 0; i--) {
@@ -159,16 +145,13 @@ export default function DiscoverPostsScreen() {
         }
         return copy;
       };
-
       const orderedCandidates = [...shuffle(notYetSeen), ...shuffle(alreadySeenToday)];
-
       setCandidates(orderedCandidates);
       setAuthorMap(usersByEmail);
       setLoading(false);
     };
     loadData();
   }, []);
-
   // ===== ストーリー一覧を取得 =====
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "stories"), (snapshot) => {
@@ -180,7 +163,6 @@ export default function DiscoverPostsScreen() {
     });
     return unsubscribe;
   }, []);
-
   // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
   const getUserStories = (userId: string) => {
     const now = Date.now();
@@ -190,13 +172,10 @@ export default function DiscoverPostsScreen() {
       return now - createdMs < DAY_MS;
     });
   };
-
   const recordSwipe = async (targetId: string, direction: "left" | "right") => {
     const myUid = auth.currentUser?.uid;
     if (!myUid) return;
-
     const todayKey = getTodayKey();
-
     await setDoc(doc(db, "swipes", `${myUid}_post_${targetId}`), {
       fromUid: myUid,
       targetType: "post",
@@ -205,24 +184,19 @@ export default function DiscoverPostsScreen() {
       dayKey: todayKey,
       createdAt: serverTimestamp(),
     });
-
     const newCount = swipeCountToday + 1;
     await setDoc(doc(db, "swipeLimits", `${myUid}_${todayKey}`), {
       count: newCount,
     });
     setSwipeCountToday(newCount);
   };
-
   const handleLike = async (post: PostCandidate) => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail) return;
-
     const postRef = doc(db, "posts", post.id);
     const alreadyLiked = post.likedBy?.includes(myEmail);
     if (alreadyLiked) return;
-
     await updateDoc(postRef, { likedBy: [...(post.likedBy || []), myEmail] });
-
     if (post.authorEmail && post.authorEmail !== myEmail) {
       const myUid = auth.currentUser?.uid;
       let myUsername = myEmail;
@@ -232,7 +206,6 @@ export default function DiscoverPostsScreen() {
           myUsername = myDoc.data().username || myEmail;
         }
       }
-
       await addDoc(collection(db, "notifications"), {
         toUserEmail: post.authorEmail,
         fromUserEmail: myEmail,
@@ -244,14 +217,11 @@ export default function DiscoverPostsScreen() {
       });
     }
   };
-
   const handleSwipe = async (direction: "left" | "right") => {
     if (processing) return;
     if (swipeCountToday >= DAILY_SWIPE_LIMIT) return;
-
     const current = candidates[cardIndex];
     if (!current) return;
-
     setProcessing(true);
     try {
       if (direction === "right") {
@@ -263,11 +233,9 @@ export default function DiscoverPostsScreen() {
       setProcessing(false);
     }
   };
-
   const goToPostDetail = (postId: string) => {
     router.push({ pathname: "/post/[id]", params: { id: postId } });
   };
-
   // ===== アイコンをタップしたときの動作：ストーリーがあれば閲覧画面、なければプロフィール =====
   const handleAvatarPress = (authorId: string) => {
     const authorStories = getUserStories(authorId);
@@ -277,7 +245,6 @@ export default function DiscoverPostsScreen() {
       router.push({ pathname: "/user/[id]", params: { id: authorId } });
     }
   };
-
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -285,11 +252,9 @@ export default function DiscoverPostsScreen() {
       </View>
     );
   }
-
   const hasReachedLimit = swipeCountToday >= DAILY_SWIPE_LIMIT;
   const currentCard = candidates[cardIndex];
   const nextCard = candidates[cardIndex + 1];
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
@@ -302,7 +267,6 @@ export default function DiscoverPostsScreen() {
             {swipeCountToday}/{DAILY_SWIPE_LIMIT}
           </Text>
         </View>
-
         <View style={styles.cardArea}>
           {hasReachedLimit ? (
             <View style={styles.centerContainer}>
@@ -331,6 +295,7 @@ export default function DiscoverPostsScreen() {
                         : []
                     }
                     onAvatarPress={handleAvatarPress}
+                    isCompactWeb={isCompactWeb}
                   />
                 </View>
               )}
@@ -351,13 +316,13 @@ export default function DiscoverPostsScreen() {
                         : []
                     }
                     onAvatarPress={handleAvatarPress}
+                    isCompactWeb={isCompactWeb}
                   />
                 </View>
               </SwipeableCard>
             </>
           )}
         </View>
-
         {!hasReachedLimit && currentCard && (
           <View style={styles.buttonRow}>
             <TouchableOpacity
@@ -380,42 +345,37 @@ export default function DiscoverPostsScreen() {
     </SafeAreaView>
   );
 }
-
 function PostCardContent({
   post,
   author,
   onViewDetail,
   authorStories,
   onAvatarPress,
+  isCompactWeb,
 }: {
   post: PostCandidate;
   author?: DocumentData;
   onViewDetail: (postId: string) => void;
   authorStories: DocumentData[];
   onAvatarPress: (authorId: string) => void;
+  isCompactWeb: boolean;
 }) {
   const photos = getPostPhotos(post);
-
   const myUid = auth.currentUser?.uid;
   const hasUnread = authorStories.some((s) => !(s.viewedBy || []).includes(myUid));
-
   // ===== 写真を、左右タップで切り替えるための状態 =====
   const [photoIndex, setPhotoIndex] = useState(0);
-
   const goPrevPhoto = () => {
     setPhotoIndex((prev) => (prev > 0 ? prev - 1 : prev));
   };
-
   const goNextPhoto = () => {
     setPhotoIndex((prev) => (prev < photos.length - 1 ? prev + 1 : prev));
   };
-
   const displayedPhoto = photos[photoIndex] || photos[0];
-  const bodyPreview = getFirstSentences(post.body, 3);
-
+  const bodyPreview = getFirstSentences(post.body, isCompactWeb ? 2 : 3);
   return (
     <>
-      <View style={styles.cardPhotoArea}>
+      <View style={[styles.cardPhotoArea, isCompactWeb && styles.cardPhotoAreaCompact]}>
         {displayedPhoto ? (
           <Image source={{ uri: displayedPhoto }} style={styles.cardPhoto} />
         ) : (
@@ -423,7 +383,6 @@ function PostCardContent({
             <MaterialIcons name="image" size={40} color="#ccc" />
           </View>
         )}
-
         {/* ===== 写真が複数あるときだけ、進み具合を示すバーを表示 ===== */}
         {photos.length > 1 && (
           <View style={styles.photoProgressRow}>
@@ -438,7 +397,6 @@ function PostCardContent({
             ))}
           </View>
         )}
-
         {/* ===== 写真の左半分・右半分をタップして、前後の写真に切り替える ===== */}
         {photos.length > 1 && (
           <View style={styles.photoTapZoneRow} pointerEvents="box-none">
@@ -447,11 +405,9 @@ function PostCardContent({
           </View>
         )}
       </View>
-
       <View style={styles.cardBody}>
         {/* ===== タイトル：省略せず全文表示 ===== */}
         <Text style={styles.postTitle}>{post.title || "（無題）"}</Text>
-
         {/* ===== ハッシュタグ：全て表示 ===== */}
         {post.hashtags && post.hashtags.length > 0 && (
           <View style={styles.hashtagRow}>
@@ -462,10 +418,8 @@ function PostCardContent({
             ))}
           </View>
         )}
-
         {/* ===== 本文：最初の3文だけをプレビュー表示 ===== */}
         {bodyPreview ? <Text style={styles.bodyPreview}>{bodyPreview}</Text> : null}
-
         <View style={styles.cardHeaderRow}>
           <TouchableOpacity onPress={() => author?.id && onAvatarPress(author.id)}>
             <StampFrame
@@ -482,7 +436,6 @@ function PostCardContent({
           </TouchableOpacity>
           <Text style={styles.cardUsername}>@{author?.handle || "unknown"}</Text>
         </View>
-
         {/* ===== 投稿を見るボタン ===== */}
         <TouchableOpacity
           style={styles.viewDetailButton}
@@ -495,7 +448,6 @@ function PostCardContent({
     </>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -554,6 +506,7 @@ const styles = StyleSheet.create({
   },
   cardArea: {
     flex: 1,
+    minHeight: 0,
     padding: 20,
     justifyContent: "center",
     alignItems: "center",
@@ -585,6 +538,10 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 14,
     backgroundColor: "#f7f7f7",
     position: "relative",
+  },
+  // ===== Web版・スマホ幅のときだけ、写真を低くして、全体の高さに余裕を持たせる =====
+  cardPhotoAreaCompact: {
+    aspectRatio: 16 / 9,
   },
   cardPhoto: {
     width: "100%",

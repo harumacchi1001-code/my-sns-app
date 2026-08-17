@@ -21,6 +21,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -34,6 +35,8 @@ const DAILY_SWIPE_LIMIT = 99999;
 const MATCH_EFFECT_DURATION = 750;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// ===== Web版・スマホ幅かどうかの判定に使う、しきい値 =====
+const MOBILE_BREAKPOINT = 768;
 
 type Candidate = DocumentData & { id: string };
 
@@ -45,6 +48,9 @@ const getTodayKey = () => {
 
 export default function DiscoverUsersScreen() {
   const router = useRouter();
+  // ===== Web版・スマホ幅のときだけ、カードをコンパクトにするための判定 =====
+  const { width } = useWindowDimensions();
+  const isCompactWeb = Platform.OS === "web" && width < MOBILE_BREAKPOINT;
   const [loading, setLoading] = useState(true);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [cardIndex, setCardIndex] = useState(0);
@@ -349,6 +355,7 @@ export default function DiscoverUsersScreen() {
                     onViewProfile={goToProfile}
                     userStories={getUserStories(nextCard.id)}
                     onAvatarPress={handleAvatarPress}
+                    isCompactWeb={isCompactWeb}
                   />
                 </View>
               )}
@@ -364,6 +371,7 @@ export default function DiscoverUsersScreen() {
                     onViewProfile={goToProfile}
                     userStories={getUserStories(currentCard.id)}
                     onAvatarPress={handleAvatarPress}
+                    isCompactWeb={isCompactWeb}
                   />
                 </View>
               </SwipeableCard>
@@ -418,11 +426,13 @@ function UserCardContent({
   onViewProfile,
   userStories,
   onAvatarPress,
+  isCompactWeb,
 }: {
   user: Candidate;
   onViewProfile: (userId: string) => void;
   userStories: DocumentData[];
   onAvatarPress: (userId: string) => void;
+  isCompactWeb: boolean;
 }) {
   const card = user.discoveryCard || {};
   const photos: string[] = card.photos || [];
@@ -446,7 +456,7 @@ function UserCardContent({
 
   return (
     <>
-      <View style={styles.cardPhotoArea}>
+      <View style={[styles.cardPhotoArea, isCompactWeb && styles.cardPhotoAreaCompact]}>
         {displayedPhoto ? (
           <Image source={{ uri: displayedPhoto }} style={styles.cardPhoto} />
         ) : (
@@ -594,6 +604,7 @@ const styles = StyleSheet.create({
   },
   cardArea: {
     flex: 1,
+    minHeight: 0,
     padding: 20,
     justifyContent: "center",
     alignItems: "center",
@@ -625,6 +636,10 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 14,
     backgroundColor: "#f7f7f7",
     position: "relative",
+  },
+  // ===== Web版・スマホ幅のときだけ、写真を低くして、全体の高さに余裕を持たせる =====
+  cardPhotoAreaCompact: {
+    aspectRatio: 16 / 9,
   },
   cardPhoto: {
     width: "100%",
