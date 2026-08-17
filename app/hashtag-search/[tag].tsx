@@ -4,19 +4,19 @@ import { collection, DocumentData, onSnapshot, query, where } from "firebase/fir
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ActivityIndicator,
-  Animated,
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+    ActivityIndicator,
+    Animated,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import CardsIcon from "../../components/CardsIcon";
@@ -39,23 +39,17 @@ type PostItem = {
   authorEmail?: string;
 };
 
-// ===== ハッシュタグの候補（タグ名＋件数） =====
 type HashtagCandidate = {
   tag: string;
   count: number;
 };
 
-// ===== アカウント／投稿／タグの、3つのタブ =====
 const TABS = ["user", "post", "hashtag"] as const;
 type TabMode = (typeof TABS)[number];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-// ===== ここからWeb版専用 =====
 const isWeb = Platform.OS === "web";
-// ===== ここまでWeb版専用 =====
 
-// ===== 投稿のハッシュタグから、検索ワードを含む候補を、件数付きで集計する =====
 const getHashtagCandidates = (allPosts: PostItem[], text: string): HashtagCandidate[] => {
   const keyword = text.trim().toLowerCase();
   if (!keyword) return [];
@@ -72,42 +66,35 @@ const getHashtagCandidates = (allPosts: PostItem[], text: string): HashtagCandid
     .sort((a, b) => b.count - a.count);
 };
 
-export default function SearchScreen() {
+export default function HashtagSearchScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { initialTag } = useLocalSearchParams<{ initialTag?: string }>();
-  const [mode, setMode] = useState<TabMode>("user");
-  const [searchText, setSearchText] = useState("");
+  // ===== URLから、最初の検索ワードを受け取る（#は付いていない） =====
+  const { tag } = useLocalSearchParams<{ tag: string }>();
+  const initialWord = tag ? decodeURIComponent(tag) : "";
+
+  const [mode, setMode] = useState<TabMode>("hashtag");
+  const [searchText, setSearchText] = useState(initialWord);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [posts, setPosts] = useState<PostItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ===== 発見（ユーザー／投稿を選ぶ）中央カードメニューの、表示状態 =====
   const [discoverMenuVisible, setDiscoverMenuVisible] = useState(false);
 
-  // ===== 横スワイプで、3タブを切り替えるための状態 =====
   const scrollRef = useRef<ScrollView>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   // ===== スワイプ中の位置を、なめらかに追いかける、下線用のアニメーション値 =====
   const scrollX = useRef(new Animated.Value(0)).current;
 
-  // ===== ストーリー関連の状態 =====
   const [stories, setStories] = useState<DocumentData[]>([]);
 
+  // ===== 開いた直後は、「タグ」タブ（一番右）から始める =====
   useEffect(() => {
-    if (initialTag) {
-      setSearchText(initialTag);
-    }
-  }, [initialTag]);
-
-  // ===== initialTagがある場合は、containerWidthが確定した後に、タグタブへスワイプ移動する =====
-  useEffect(() => {
-    if (initialTag && containerWidth > 0) {
-      setMode("hashtag");
+    if (containerWidth > 0) {
       scrollRef.current?.scrollTo({ x: containerWidth * 2, animated: false });
       scrollX.setValue(containerWidth * 2);
     }
-  }, [initialTag, containerWidth]);
+  }, [containerWidth]);
 
   useEffect(() => {
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -127,7 +114,6 @@ export default function SearchScreen() {
       setLoading(false);
     });
 
-    // ===== ストーリー一覧を取得 =====
     const unsubscribeStories = onSnapshot(collection(db, "stories"), (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -143,7 +129,6 @@ export default function SearchScreen() {
     };
   }, []);
 
-  // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
   const getUserStories = (userId: string) => {
     const now = Date.now();
     return stories.filter((s) => {
@@ -155,7 +140,6 @@ export default function SearchScreen() {
 
   const myUid = auth.currentUser?.uid;
 
-  // ===== 検索結果の、ユーザーアイコンをタップしたときの動作 =====
   const handleUserAvatarPress = (userId: string) => {
     const userStories = getUserStories(userId);
     if (userStories.length > 0) {
@@ -174,35 +158,30 @@ export default function SearchScreen() {
       })
     : [];
 
-  // ===== 「投稿」タブ：タイトル・ハッシュタグの、両方を検索対象にする =====
   const filteredPosts = posts.filter((p) => {
     const text = searchText.toLowerCase();
     const titleMatch = (p.title || "").toLowerCase().includes(text);
-    const hashtagMatch = (p.hashtags || []).some((tag) => tag.toLowerCase().includes(text));
+    const hashtagMatch = (p.hashtags || []).some((t2) => t2.toLowerCase().includes(text));
     return titleMatch || hashtagMatch;
   });
 
-  // ===== 「タグ」タブ：ハッシュタグ名の候補（件数付き） =====
   const hashtagCandidates = getHashtagCandidates(posts, searchText);
 
-  // ===== ハッシュタグ候補をタップしたら、新しい検索画面を、重ねて開く =====
-  const handleSelectHashtagCandidate = (tag: string) => {
-    router.push(`/hashtag-search/${encodeURIComponent(tag)}` as any);
+  // ===== ハッシュタグ候補をタップしたら、この画面自身を、さらに重ねて開く（無限に繰り返せる） =====
+  const handleSelectHashtagCandidate = (nextTag: string) => {
+    router.push(`/hashtag-search/${encodeURIComponent(nextTag)}` as any);
   };
 
-  // ===== タブをタップしたときに、該当ページへスワイプ移動する =====
   const handleTabPress = (index: number) => {
     setMode(TABS[index]);
     scrollRef.current?.scrollTo({ x: containerWidth * index, animated: true });
   };
 
-  // ===== 手でスワイプし終えたときに、選択中のタブを更新する（見出しの太字表示などに使う） =====
   const handleMomentumScrollEnd = (e: any) => {
     if (containerWidth === 0) return;
     const page = Math.round(e.nativeEvent.contentOffset.x / containerWidth);
     setMode(TABS[Math.max(0, Math.min(page, TABS.length - 1))]);
   };
-  // ===== スワイプ中、常に呼ばれる。下線の位置を、リアルタイムに更新する =====
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
     { useNativeDriver: false }
@@ -231,7 +210,15 @@ export default function SearchScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
-        <Text style={styles.header}>{t("search.title")}</Text>
+        {/* ===== 戻るボタン＋検索ワード ===== */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color="#222" />
+          </TouchableOpacity>
+          <Text style={styles.header} numberOfLines={1}>
+            #{initialWord}
+          </Text>
+        </View>
 
         {/* ===== 検索バー（常時表示）＋発見アイコン ===== */}
         <View style={styles.searchBarRow}>
@@ -378,9 +365,7 @@ export default function SearchScreen() {
                         )}
                       </View>
                       <View style={styles.postListTextWrapper}>
-                        {/* ===== タイトル：省略せず、全文表示 ===== */}
                         <Text style={styles.postListTitle}>{item.title || t("search.noTitle")}</Text>
-                        {/* ===== ハッシュタグ：省略せず、全部表示 ===== */}
                         {item.hashtags && item.hashtags.length > 0 && (
                           <View style={styles.postListHashtagsRow}>
                             {item.hashtags.map((tag, index) => (
@@ -397,7 +382,7 @@ export default function SearchScreen() {
                 />
               </View>
 
-              {/* ===== タグ：ハッシュタグ候補の一覧（投稿ではない） ===== */}
+              {/* ===== タグ：ハッシュタグ候補の一覧（タップで、さらに深く検索） ===== */}
               <View style={[styles.tabPage, { width: containerWidth }]}>
                 <FlatList
                   data={hashtagCandidates}
@@ -484,7 +469,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
     web: {
       flex: 1,
@@ -496,7 +480,6 @@ const styles = StyleSheet.create({
       flex: 1,
     },
   }),
-  // ===== ここまでWeb版専用 =====
   centerContainer: {
     flex: 1,
     justifyContent: "center",
@@ -509,13 +492,19 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 20,
   },
-  header: {
-    fontSize: 20,
-    fontWeight: "600",
+  // ===== 戻るボタン＋検索ワードのヘッダー =====
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     paddingHorizontal: 16,
     paddingTop: 12,
   },
-  // ===== 検索バー・発見アイコンのスタイル =====
+  header: {
+    fontSize: 18,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
   searchBarRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -548,7 +537,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // ===== 下線タブのスタイル =====
   tabsRow: {
     flexDirection: "row",
     borderBottomWidth: 0.5,
@@ -578,7 +566,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#222",
     borderRadius: 1,
   },
-  // ===== 横スワイプで切り替わる、ページのスタイル =====
   swipeContainer: {
     flex: 1,
   },
@@ -609,7 +596,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingTop: 12,
   },
-  // ===== 投稿：横並びリストのスタイル =====
   postListRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -653,7 +639,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#4a90e2",
   },
-  // ===== タグ：ハッシュタグ候補一覧のスタイル =====
   hashtagCandidateRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -689,7 +674,6 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 2,
   },
-  // ===== 発見メニュー：画面中央のカード形式のスタイル =====
   discoverMenuOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
