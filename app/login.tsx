@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -15,6 +15,11 @@ import {
     View,
 } from "react-native";
 import { auth, db } from "../firebaseConfig";
+import { normalizeEmail } from "../utils/emailHelpers";
+
+// ===== ここからWeb版専用 =====
+const isWeb = Platform.OS === "web";
+// ===== ここまでWeb版専用 =====
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -23,36 +28,49 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSignUp = async () => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const uid = userCredential.user.uid;
-
-      await setDoc(doc(db, "users", uid), {
-        email: email,
-        username: "",
-        bio: "",
-        snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
-        following: [],
-        followers: [],
-      });
-
-      router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
-    } catch (error: any) {
-      console.log("エラー:", error.message);
-      alert(t("login.signupError") + error.message);
-    }
-  };
-
   const handleLogin = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // ===== 入力前チェック：見えない全角文字・空白を、自動で整える =====
+      const cleanedEmail = normalizeEmail(email);
+      await signInWithEmailAndPassword(auth, cleanedEmail, password);
       router.replace("/(tabs)");
     } catch (error: any) {
       console.log("エラー:", error.message);
       alert(t("login.loginError") + error.message);
     }
   };
+
+  // ===== ここからWeb版専用：Googleログイン ===== 
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const uid = result.user.uid;
+
+      // ===== 初めてのログインの場合は、ユーザー情報を新規作成する =====
+      const userDocRef = doc(db, "users", uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        await setDoc(userDocRef, {
+          email: result.user.email || "",
+          username: result.user.displayName || "",
+          photoUrl: result.user.photoURL || "",
+          bio: "",
+          snsLinks: { x: "", instagram: "", tiktok: "", youtube: "", facebook: "" },
+          following: [],
+          followers: [],
+        });
+        router.replace({ pathname: "/signup-details", params: { isNewSignup: "true" } });
+      } else {
+        router.replace("/(tabs)");
+      }
+    } catch (error: any) {
+      console.log("Googleログインエラー:", error.message);
+      alert("Googleログインに失敗しました: " + error.message);
+    }
+  };
+  // ===== ここまでWeb版専用 =====
 
   const content = (
     <KeyboardAvoidingView
@@ -68,6 +86,8 @@ export default function LoginScreen() {
           placeholder={t("login.emailPlaceholder")}
           value={email}
           onChangeText={setEmail}
+          // ===== 入力欄から離れたタイミングで、見た目にも整えておく =====
+          onBlur={() => setEmail((prev) => normalizeEmail(prev))}
           style={styles.input}
           autoCapitalize="none"
           keyboardType="email-address"
@@ -94,7 +114,15 @@ export default function LoginScreen() {
           <Text style={styles.loginButtonText}>{t("login.loginButton")}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.signupButton} onPress={handleSignUp}>
+        {/* ===== ここからWeb版専用：Googleログインボタン ===== */}
+        {isWeb && (
+          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
+            <Text style={styles.googleButtonText}>Googleでログイン</Text>
+          </TouchableOpacity>
+        )}
+        {/* ===== ここまでWeb版専用 ===== */}
+
+        <TouchableOpacity style={styles.signupButton} onPress={() => router.push("/signup")}>
           <Text style={styles.signupButtonText}>{t("login.signupButton")}</Text>
         </TouchableOpacity>
       {/* ===== ここからWeb版専用 ===== */}
@@ -179,6 +207,22 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
+  // ===== ここからWeb版専用：Googleボタンのスタイル =====
+  googleButton: {
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    marginBottom: 12,
+    backgroundColor: "#fff",
+  },
+  googleButtonText: {
+    color: "#333",
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  // ===== ここまでWeb版専用 =====
   signupButton: {
     borderRadius: 8,
     paddingVertical: 14,
