@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { name: "index", title: "ホーム", icon: "home" as const, route: "/" },
   { name: "explore", title: "検索", icon: "search" as const, route: "/explore" },
   { name: "post", title: "作成", icon: "add-box" as const, route: "/post" },
-  { name: "chat", title: "チャット", icon: "chat-bubble-outline" as const, route: "/chat" },
+  { name: "chat", title: "チャット", icon: "send" as const, route: "/chat" },
   { name: "notifications", title: "お知らせ", icon: "favorite" as const, route: "/notifications" },
   { name: "profile", title: "プロフィール", icon: "person" as const, route: "/profile" },
 ];

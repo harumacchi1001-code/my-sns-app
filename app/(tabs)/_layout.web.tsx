@@ -54,7 +54,7 @@ function FloatingChatButton() {
       onPress={() => router.push("/chat")}
     >
       <Text style={styles.floatingChatLabel}>チャット</Text>
-      <MaterialIcons name="chat-bubble-outline" size={20} color="#222" />
+      <MaterialIcons name="send" size={20} color="#222" />
     </TouchableOpacity>
   );
 }
