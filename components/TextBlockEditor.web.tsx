@@ -1,0 +1,763 @@
+import { mergeAttributes, Node } from "@tiptap/core";
+import Color from "@tiptap/extension-color";
+import Highlight from "@tiptap/extension-highlight";
+import ImageExtension from "@tiptap/extension-image";
+import Link from "@tiptap/extension-link";
+import Placeholder from "@tiptap/extension-placeholder";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import { TextStyle } from "@tiptap/extension-text-style";
+import Underline from "@tiptap/extension-underline";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+// ===== 動画を、文章の中の、1つの要素として、新しく定義する =====
+const VideoBlock = Node.create({
+  name: "videoBlock",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      url: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-url"),
+        renderHTML: (attributes) => ({ "data-url": attributes.url }),
+      },
+      ratio: {
+        default: 16 / 9,
+        parseHTML: (element) => parseFloat(element.getAttribute("data-ratio") || "") || 16 / 9,
+        renderHTML: (attributes) => ({ "data-ratio": attributes.ratio }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-video-block]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const url = HTMLAttributes.url || HTMLAttributes["data-url"] || "";
+    const ratio = HTMLAttributes.ratio || HTMLAttributes["data-ratio"] || 16 / 9;
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-video-block": "true", class: "diary-video-block", style: `aspect-ratio: ${ratio};` }),
+      ["video", { src: url, controls: "true" }],
+    ];
+  },
+});
+// ===== 「画像グループ」を、文章の中の、1つの要素として、新しく定義する =====
+const ImageGroup = Node.create({
+  name: "imageGroup",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      urls: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-urls"),
+        renderHTML: (attributes) => ({ "data-urls": attributes.urls }),
+      },
+      ratios: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-ratios"),
+        renderHTML: (attributes) => ({ "data-ratios": attributes.ratios }),
+      },
+      types: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-types"),
+        renderHTML: (attributes) => ({ "data-types": attributes.types }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-image-group]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const urls: string = HTMLAttributes.urls || HTMLAttributes["data-urls"] || "";
+    const ratios: string = HTMLAttributes.ratios || HTMLAttributes["data-ratios"] || "";
+    const types: string = HTMLAttributes.types || HTMLAttributes["data-types"] || "";
+    const urlList = urls.split(",").filter(Boolean);
+    const ratioList = ratios.split(",").map((r) => parseFloat(r) || 1);
+    const typeList = types.split(",");
+    const displayUrls = urlList.slice(0, 4);
+    const remainingCount = urlList.length - displayUrls.length;
+    const rows: { url: string; ratio: number; isVideo: boolean; isMore?: boolean }[][] = [];
+    for (let i = 0; i < displayUrls.length; i += 2) {
+      const row = [];
+      row.push({ url: displayUrls[i], ratio: ratioList[i] || 1, isVideo: typeList[i] === "v" });
+      if (displayUrls[i + 1]) {
+        const isLastAndHasMore = i + 1 === displayUrls.length - 1 && remainingCount > 0;
+        row.push({
+          url: displayUrls[i + 1],
+          ratio: ratioList[i + 1] || 1,
+          isVideo: typeList[i + 1] === "v",
+          isMore: isLastAndHasMore,
+        });
+      }
+      rows.push(row);
+    }
+    if (displayUrls.length % 2 === 1 && remainingCount > 0) {
+      rows[rows.length - 1][0].isMore = true;
+    }
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, { "data-image-group": "true", class: "diary-image-group" }),
+      ...rows.map((row) => [
+        "div",
+        { class: "diary-image-row" },
+        ...row.map((item) => {
+          const style = `aspect-ratio: ${item.ratio}; height: 100%; flex-grow: 0; flex-shrink: 0;`;
+          const mediaTag = item.isVideo
+            ? ["video", { src: item.url, muted: "true", playsinline: "true", controls: "true" }]
+            : ["img", { src: item.url }];
+          if (item.isMore) {
+            return ["div", { class: "diary-image-group-more", style, "data-more": `+${remainingCount}` }, mediaTag];
+          }
+          return item.isVideo
+            ? ["div", { class: "diary-image-group-video-wrapper", style }, mediaTag]
+            : ["img", { src: item.url, style }];
+        }),
+      ]),
+    ];
+  },
+});
+export type TextBlockEditorHandle = {
+  getHTML: () => Promise<string>;
+};
+type Props = {
+  initialContent?: string;
+  onFocus?: () => void;
+  onPickMedia?: () => Promise<{ type: "image" | "video"; url: string; ratio: number }[]>;
+  onInsertVideo?: () => void;
+  onContentChange?: (html: string) => void;
+};
+const HIGHLIGHT_COLORS = [
+  { label: "黄", color: "#ffeb3b" },
+  { label: "緑", color: "#a5d6a7" },
+  { label: "青", color: "#90caf9" },
+  { label: "桃", color: "#f48fb1" },
+  { label: "橙", color: "#ffcc80" },
+];
+const TEXT_COLORS = [
+  { label: "黒", color: "#222222" },
+  { label: "赤", color: "#e74c3c" },
+  { label: "青", color: "#4a90e2" },
+  { label: "緑", color: "#2ecc71" },
+  { label: "紫", color: "#9b59b6" },
+  { label: "橙", color: "#f39c12" },
+];
+const EDITOR_CSS = `
+  .diary-image-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 10px -18px;
+    width: calc(100% + 36px);
+  }
+  .diary-image-row {
+    display: flex;
+    gap: 3px;
+    height: 200px;
+    justify-content: center;
+  }
+  .diary-image-group img {
+    height: 100%;
+    object-fit: cover;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    display: block;
+  }
+  .diary-image-group-more {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+  }
+  .diary-image-group-more img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .diary-image-group-more::after {
+    content: attr(data-more);
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .diary-image-group-video-wrapper {
+    overflow: hidden;
+  }
+  .diary-image-group-video-wrapper video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .diary-video-block {
+    width: calc(100% + 36px);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 10px -18px;
+    background: #000;
+  }
+  .diary-video-block video {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .diary-tiptap-content {
+    outline: none;
+    border: none;
+    box-shadow: none;
+    padding: 0 18px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #222;
+    min-height: 60px;
+  }
+  .diary-tiptap-content h1 { font-size: 26px; font-weight: 700; margin: 20px 0 10px; line-height: 1.3; }
+  .diary-tiptap-content h2 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; line-height: 1.3; }
+  .diary-tiptap-content blockquote { border-left: 4px solid #ccc; padding-left: 12px; margin: 12px 0; color: #666; font-style: italic; }
+  .diary-tiptap-content ul, .diary-tiptap-content ol { padding-left: 20px; margin: 8px 0; }
+  .diary-tiptap-content li { margin: 4px 0; }
+  .diary-tiptap-content hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+  .diary-tiptap-content ul[data-type="taskList"] { list-style: none; padding-left: 4px; }
+  .diary-tiptap-content > img { max-width: none; width: calc(100% + 36px); margin: 10px -18px; border-radius: 8px; display: block; }
+  .diary-tiptap-content p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: #bbb;
+    pointer-events: none;
+    height: 0;
+  }
+`;
+const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
+  ({ initialContent = "", onFocus, onPickMedia, onInsertVideo, onContentChange }, ref) => {
+    const [insertMenuVisible, setInsertMenuVisible] = useState(false);
+    const [menuPosition, setMenuPosition] = useState({ top: 100, left: 50 });
+    const [colorMenuVisible, setColorMenuVisible] = useState(false);
+    const [colorMenuPosition, setColorMenuPosition] = useState({ top: 100, left: 50 });
+    const [textColorMenuVisible, setTextColorMenuVisible] = useState(false);
+    const [textColorMenuPosition, setTextColorMenuPosition] = useState({ top: 100, left: 50 });
+    const [linkMenuVisible, setLinkMenuVisible] = useState(false);
+    const [linkMenuPosition, setLinkMenuPosition] = useState({ top: 100, left: 50 });
+    const [linkInput, setLinkInput] = useState("");
+    const [, forceUpdate] = useState(0);
+    const [toolbarPosition, setToolbarPosition] = useState<{ top: number; left: number } | null>(null);
+
+    // ===== ツールバーの、横方向の位置を、画面の余白（本文エリアの、外側）に、固定するための、調整値 =====
+    const TOOLBAR_OFFSET_X = 56;
+
+    const editor = useEditor({
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [1, 2] },
+        }),
+        Underline,
+        TextStyle,
+        Color,
+        Highlight.configure({ multicolor: true }),
+        Link.configure({ openOnClick: false }),
+        ImageExtension,
+        ImageGroup,
+        VideoBlock,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        Placeholder.configure({ placeholder: "Write something …" }),
+      ],
+      content: initialContent,
+      editorProps: {
+        attributes: { class: "diary-tiptap-content" },
+      },
+      onUpdate: ({ editor: currentEditor }) => {
+        onContentChange?.(currentEditor.getHTML());
+      },
+      onTransaction: ({ editor: currentEditor }) => {
+        forceUpdate((n) => n + 1);
+        try {
+          const { from } = currentEditor.state.selection;
+          const coords = currentEditor.view.coordsAtPos(from);
+          const editorRect = currentEditor.view.dom.getBoundingClientRect();
+          setToolbarPosition({
+            top: coords.top - editorRect.top,
+            left: -TOOLBAR_OFFSET_X,
+          });
+        } catch (e) {}
+      },
+      onCreate: ({ editor: currentEditor }) => {
+        try {
+          const coords = currentEditor.view.coordsAtPos(0);
+          const editorRect = currentEditor.view.dom.getBoundingClientRect();
+          setToolbarPosition({ top: coords.top - editorRect.top, left: -TOOLBAR_OFFSET_X });
+        } catch (e) {}
+        onContentChange?.(currentEditor.getHTML());
+      },
+    });
+    useEffect(() => {
+      if (document.getElementById("diary-tiptap-css")) return;
+      const styleTag = document.createElement("style");
+      styleTag.id = "diary-tiptap-css";
+      styleTag.innerHTML = EDITOR_CSS;
+      document.head.appendChild(styleTag);
+    }, []);
+    useImperativeHandle(ref, () => ({
+      getHTML: async () => {
+        return editor ? editor.getHTML() : "";
+      },
+    }));
+    if (!editor) {
+      return null;
+    }
+    const applyHighlight = (color: string) => {
+      editor.chain().focus().toggleHighlight({ color }).run();
+      setColorMenuVisible(false);
+    };
+    const applyTextColor = (color: string) => {
+      editor.chain().focus().setColor(color).run();
+      setTextColorMenuVisible(false);
+    };
+    const openLinkMenu = (event?: any) => {
+      const pageY = event?.nativeEvent?.pageY ?? 100;
+      const pageX = event?.nativeEvent?.pageX ?? 50;
+      setLinkMenuPosition({ top: pageY - 10, left: pageX - 200 });
+      setLinkInput(editor.getAttributes("link").href || "");
+      setLinkMenuVisible(true);
+    };
+    const applyLink = () => {
+      const trimmed = linkInput.trim();
+      if (trimmed) {
+        const finalUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+        editor.chain().focus().extendMarkRange("link").setLink({ href: finalUrl }).run();
+      }
+      setLinkMenuVisible(false);
+      setLinkInput("");
+    };
+    const removeLink = () => {
+      editor.chain().focus().unsetLink().run();
+      setLinkMenuVisible(false);
+      setLinkInput("");
+    };
+    const runInsertAction = (action: () => void) => {
+      setInsertMenuVisible(false);
+      setTimeout(() => {
+        editor.commands.focus();
+        setTimeout(() => {
+          action();
+        }, 30);
+      }, 30);
+    };
+    const insertMenuItems = [
+      ...(onPickMedia
+        ? [
+            {
+              icon: "🖼️",
+              label: "画像・動画を追加（複数選択可）",
+              action: async () => {
+                const items = await onPickMedia();
+                if (!items || items.length === 0) return;
+                if (items.length === 1) {
+                  const item = items[0];
+                  if (item.type === "video") {
+                    (editor.chain().focus() as any)
+                      .insertContent({ type: "videoBlock", attrs: { url: item.url, ratio: item.ratio } })
+                      .run();
+                  } else {
+                    editor.chain().focus().setImage({ src: item.url }).run();
+                  }
+                  editor.commands.setTextSelection(editor.state.doc.content.size);
+                  return;
+                }
+                (editor.chain().focus() as any)
+                  .insertContent({
+                    type: "imageGroup",
+                    attrs: {
+                      urls: items.map((i) => i.url).join(","),
+                      ratios: items.map((i) => i.ratio.toFixed(3)).join(","),
+                      types: items.map((i) => (i.type === "video" ? "v" : "i")).join(","),
+                    },
+                  })
+                  .run();
+                editor.commands.setTextSelection(editor.state.doc.content.size);
+              },
+            },
+          ]
+        : onInsertVideo
+        ? [{ icon: "🎬", label: "動画を追加（下に追加されます）", action: () => onInsertVideo() }]
+        : []),
+      { icon: "H1", label: "見出し（大）", action: () => editor.chain().focus().toggleHeading({ level: 1 }).run() },
+      { icon: "H2", label: "見出し（小）", action: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
+      { icon: "❝", label: "引用", action: () => editor.chain().focus().toggleBlockquote().run() },
+      { icon: "•", label: "箇条書きリスト", action: () => editor.chain().focus().toggleBulletList().run() },
+      { icon: "1.", label: "番号付きリスト", action: () => editor.chain().focus().toggleOrderedList().run() },
+      { icon: "☑", label: "チェックリスト", action: () => editor.chain().focus().toggleTaskList().run() },
+      { icon: "―", label: "区切り線", action: () => editor.chain().focus().setHorizontalRule().run() },
+      { icon: "B", label: "太字", action: () => editor.chain().focus().toggleBold().run() },
+      { icon: "U", label: "下線", action: () => editor.chain().focus().toggleUnderline().run() },
+      { icon: "S", label: "打ち消し線", action: () => editor.chain().focus().toggleStrike().run() },
+    ];
+    const activeTextColor = editor.getAttributes("textStyle").color;
+    const hasActiveLink = editor.isActive("link");
+    return (
+      <View style={styles.container}>
+        <View style={styles.richTextWrapper}>
+          {toolbarPosition && (
+            <View
+              style={[
+                styles.floatingToolbar,
+                { top: toolbarPosition.top, left: toolbarPosition.left, position: "absolute" },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.plusButton}
+                onPress={(event: any) => {
+                  const pageY = event?.nativeEvent?.pageY ?? 100;
+                  const pageX = event?.nativeEvent?.pageX ?? 50;
+                  setMenuPosition({ top: pageY - 10, left: pageX + 16 });
+                  setInsertMenuVisible(true);
+                }}
+              >
+                <Text style={styles.plusButtonText}>＋</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.smallIconButton}
+                onPress={(event: any) => {
+                  const pageY = event?.nativeEvent?.pageY ?? 100;
+                  const pageX = event?.nativeEvent?.pageX ?? 50;
+                  setTextColorMenuPosition({ top: pageY - 10, left: pageX + 16 });
+                  setTextColorMenuVisible(true);
+                }}
+              >
+                <Text style={[styles.smallIconButtonTextColor, { color: activeTextColor || "#222" }]}>A</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.smallIconButton}
+                onPress={(event: any) => {
+                  const pageY = event?.nativeEvent?.pageY ?? 100;
+                  const pageX = event?.nativeEvent?.pageX ?? 50;
+                  setColorMenuPosition({ top: pageY - 10, left: pageX + 16 });
+                  setColorMenuVisible(true);
+                }}
+              >
+                <Text style={styles.smallIconButtonText}>🖍️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.smallIconButton} onPress={(event) => openLinkMenu(event)}>
+                <Text style={styles.smallIconButtonText}>🔗</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <EditorContent editor={editor} />
+        </View>
+        <Modal
+          visible={insertMenuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setInsertMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.insertMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setInsertMenuVisible(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.insertMenu, { top: menuPosition.top, left: menuPosition.left }]}
+            >
+              <View>
+                {insertMenuItems.map((item) => (
+                  <TouchableOpacity
+                    key={item.label}
+                    style={styles.insertMenuItem}
+                    onPress={() => runInsertAction(item.action)}
+                  >
+                    <View style={styles.insertMenuIconWrapper}>
+                      <Text style={styles.insertMenuIconText}>{item.icon}</Text>
+                    </View>
+                    <Text style={styles.insertMenuLabel}>{item.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+        <Modal
+          visible={colorMenuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setColorMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.insertMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setColorMenuVisible(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.smallPanel, { top: colorMenuPosition.top, left: colorMenuPosition.left }]}
+            >
+              <Text style={styles.colorMenuTitle}>マーカー</Text>
+              <View style={styles.colorSwatchRow}>
+                {HIGHLIGHT_COLORS.map((item) => (
+                  <TouchableOpacity
+                    key={item.color}
+                    style={[styles.colorSwatch, { backgroundColor: item.color }]}
+                    onPress={() => applyHighlight(item.color)}
+                  />
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.colorMenuCancel}
+                onPress={() => {
+                  editor.chain().focus().unsetHighlight().run();
+                  setColorMenuVisible(false);
+                }}
+              >
+                <Text style={styles.colorMenuCancelText}>マーカーを消す</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+        <Modal
+          visible={textColorMenuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setTextColorMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.insertMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setTextColorMenuVisible(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.smallPanel, { top: textColorMenuPosition.top, left: textColorMenuPosition.left }]}
+            >
+              <Text style={styles.colorMenuTitle}>文字色</Text>
+              <View style={styles.colorSwatchRow}>
+                {TEXT_COLORS.map((item) => (
+                  <TouchableOpacity
+                    key={item.color}
+                    style={[styles.colorSwatch, { backgroundColor: item.color }]}
+                    onPress={() => applyTextColor(item.color)}
+                  />
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.colorMenuCancel}
+                onPress={() => {
+                  editor.chain().focus().unsetColor().run();
+                  setTextColorMenuVisible(false);
+                }}
+              >
+                <Text style={styles.colorMenuCancelText}>文字色を消す</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+        <Modal
+          visible={linkMenuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLinkMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.insertMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setLinkMenuVisible(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.smallPanel, { top: linkMenuPosition.top, left: linkMenuPosition.left }]}
+            >
+              <Text style={styles.colorMenuTitle}>リンクを挿入</Text>
+              <TextInput
+                value={linkInput}
+                onChangeText={setLinkInput}
+                placeholder="https://example.com"
+                style={styles.linkInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity style={styles.linkApplyButton} onPress={applyLink}>
+                <Text style={styles.linkApplyButtonText}>設定する</Text>
+              </TouchableOpacity>
+              {hasActiveLink && (
+                <TouchableOpacity style={styles.colorMenuCancel} onPress={removeLink}>
+                  <Text style={styles.colorMenuCancelText}>リンクを解除</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      </View>
+    );
+  }
+);
+TextBlockEditor.displayName = "TextBlockEditor";
+export default TextBlockEditor;
+const styles = StyleSheet.create({
+  container: {
+    minHeight: 60,
+  },
+  richTextWrapper: {
+    flex: 1,
+    minWidth: 0,
+    position: "relative",
+    marginLeft: 56,
+  },
+  floatingToolbar: {
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 8,
+    zIndex: 10,
+  },
+  plusButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#222",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  plusButtonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+    lineHeight: 20,
+  },
+  smallIconButton: {
+    width: 30,
+    height: 30,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  smallIconButtonText: {
+    fontSize: 16,
+  },
+  smallIconButtonTextColor: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  insertMenuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+  insertMenu: {
+    position: "absolute",
+    width: 230,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eee",
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  insertMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  insertMenuIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#eee",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  insertMenuIconText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#333",
+  },
+  insertMenuLabel: {
+    fontSize: 15,
+    color: "#222",
+  },
+  colorMenuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+  },
+  colorMenu: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+  },
+  smallPanel: {
+    position: "absolute",
+    width: 220,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eee",
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  colorMenuTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 12,
+  },
+  colorSwatchRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+  },
+  colorSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  colorMenuCancel: {
+    width: "100%",
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  colorMenuCancelText: {
+    fontSize: 14,
+    color: "#e74c3c",
+    fontWeight: "600",
+  },
+  linkInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    backgroundColor: "#fafafa",
+  },
+  linkApplyButton: {
+    backgroundColor: "#222",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  linkApplyButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+});
