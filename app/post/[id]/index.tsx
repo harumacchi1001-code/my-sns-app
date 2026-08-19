@@ -183,58 +183,74 @@ function splitBodyIntoSegments(html: string): BodySegment[] {
 // ===== ここまで =====
 
 // ===== 画像・動画グループを、確実に、正しいレイアウトで、表示する、専用の部品 =====
-function MediaGroupBlock({ items }: { items: { url: string; ratio: number; isVideo: boolean }[] }) {
+function MediaGroupBlock({
+  items,
+  containerWidth,
+}: {
+  items: { url: string; ratio: number; isVideo: boolean }[];
+  containerWidth: number;
+}) {
   const displayItems = items.slice(0, 4);
   const remaining = items.length - displayItems.length;
   const rows: (typeof displayItems)[] = [];
   for (let i = 0; i < displayItems.length; i += 2) {
     rows.push(displayItems.slice(i, i + 2));
   }
+  const GAP = 3;
+  // ===== 画像が、極端に縦長のときに、行が、無限に高くならないよう、上限を、決めておく =====
+  const MAX_ROW_HEIGHT = 260;
   return (
-    <View style={{ gap: 3, borderRadius: 8, overflow: "hidden", marginVertical: 10 }}>
-      {rows.map((row, rowIndex) => (
-        <View
-          key={rowIndex}
-          style={{
-            flexDirection: "row",
-            gap: 3,
-            height: 200,
-            justifyContent: "center",
-            overflow: "hidden",
-          }}
-        >
-          {row.map((item, itemIndex) => {
-            const globalIndex = rowIndex * 2 + itemIndex;
-            const isLastWithMore = globalIndex === displayItems.length - 1 && remaining > 0;
-            const itemWidth = 200 * item.ratio;
-            return (
-              <View key={globalIndex} style={{ width: itemWidth, height: 200 }}>
+    <View style={{ gap: GAP, borderRadius: 8, overflow: "hidden", marginVertical: 10 }}>
+      {rows.map((row, rowIndex) => {
+        // ===== この行の、合計の比率から、画面の幅に、ぴったり収まる「高さ」を、逆算する =====
+        const sumRatio = row.reduce((s, it) => s + it.ratio, 0);
+        const totalGap = GAP * (row.length - 1);
+        const rawHeight = (containerWidth - totalGap) / sumRatio;
+        const rowHeight = Math.min(rawHeight, MAX_ROW_HEIGHT);
+        return (
+          <View
+            key={rowIndex}
+            style={{
+              flexDirection: "row",
+              gap: GAP,
+              height: rowHeight,
+              justifyContent: "center",
+              overflow: "hidden",
+            }}
+          >
+            {row.map((item, itemIndex) => {
+              const globalIndex = rowIndex * 2 + itemIndex;
+              const isLastWithMore = globalIndex === displayItems.length - 1 && remaining > 0;
+              const itemWidth = rowHeight * item.ratio;
+              return (
+                <View key={globalIndex} style={{ width: itemWidth, height: rowHeight }}>
                 {item.isVideo ? (
                   <MediaGroupVideo url={item.url} />
                 ) : (
                   <Image source={{ uri: item.url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
                 )}
                 {isLastWithMore && (
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      backgroundColor: "rgba(0,0,0,0.45)",
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: "#fff", fontSize: 20, fontWeight: "600" }}>+{remaining}</Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      ))}
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(0,0,0,0.45)",
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text style={{ color: "#fff", fontSize: 20, fontWeight: "600" }}>+{remaining}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -306,7 +322,7 @@ function RenderBody({
     <>
       {segments.map((segment, index) => {
         if (segment.type === "imageGroup") {
-          return <MediaGroupBlock key={index} items={segment.items} />;
+          return <MediaGroupBlock key={index} items={segment.items} containerWidth={contentWidth} />;
         }
         if (segment.type === "video") {
           return <SegmentVideo key={index} url={segment.url} ratio={segment.ratio} />;
