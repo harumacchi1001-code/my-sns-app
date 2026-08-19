@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 type Props = {
   thumbnail: string | null;
@@ -8,7 +8,9 @@ type Props = {
   bodyHtml: string;
 };
 
-// ===== プレビューの、文字サイズ・見た目を、決める、専用CSS =====
+// ===== この幅より、狭い画面は「スマホ」、広い画面は「パソコン」として、扱う =====
+const MOBILE_BREAKPOINT = 768;
+
 const PREVIEW_CSS = `
   .diary-preview-body {
     font-size: 12px;
@@ -99,6 +101,11 @@ const PREVIEW_CSS = `
 `;
 
 export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hashtags, bodyHtml }: Props) {
+  // ===== プレビューが、開いているかどうか（スマホ幅では、最初は、閉じておく） =====
+  const [isOpen, setIsOpen] = useState(false);
+  // ===== 今、スマホ幅かどうか（画面のサイズが、変わるたびに、判定し直す） =====
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     if (document.getElementById("diary-preview-css")) return;
     const styleTag = document.createElement("style");
@@ -107,13 +114,52 @@ export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hash
     document.head.appendChild(styleTag);
   }, []);
 
+  useEffect(() => {
+    const checkWidth = () => {
+      const mobile = window.innerWidth < MOBILE_BREAKPOINT;
+      setIsMobile(mobile);
+      // ===== パソコン幅では、これまでどおり、常に、開いた状態にする =====
+      if (!mobile) setIsOpen(true);
+    };
+    checkWidth();
+    window.addEventListener("resize", checkWidth);
+    return () => window.removeEventListener("resize", checkWidth);
+  }, []);
+
+  // ===== 開くための、小さなボタン（閉じているときだけ、表示） =====
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: "fixed",
+          // ===== スマホ幅：「公開」ボタンの、下あたり。パソコン幅：チャットボタンの、下あたり =====
+          top: isMobile ? 56 : 100,
+          right: 20,
+          zIndex: 5,
+          background: "#fff",
+          border: "1px solid #ddd",
+          borderRadius: 20,
+          padding: "6px 14px",
+          fontSize: 12,
+          color: "#333",
+          fontWeight: 600,
+          cursor: "pointer",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        }}
+      >
+        プレビュー
+      </button>
+    );
+  }
+
   return (
     <div
       style={{
         position: "fixed",
-        top: 90,
+        top: isMobile ? 56 : 90,
         right: 20,
-        width: 340,
+        width: isMobile ? 260 : 340,
         maxHeight: "calc(100vh - 110px)",
         overflowY: "auto",
         background: "#fff",
@@ -123,7 +169,31 @@ export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hash
         zIndex: 5,
       }}
     >
-      <div style={{ padding: "10px 12px 4px", fontSize: 11, color: "#aaa", fontWeight: 600 }}>プレビュー</div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "10px 12px 4px",
+        }}
+      >
+        <span style={{ fontSize: 11, color: "#aaa", fontWeight: 600 }}>プレビュー</span>
+        {/* ===== 閉じるボタン ===== */}
+        <button
+          onClick={() => setIsOpen(false)}
+          style={{
+            border: "none",
+            background: "transparent",
+            fontSize: 16,
+            color: "#999",
+            cursor: "pointer",
+            lineHeight: 1,
+            padding: 4,
+          }}
+        >
+          ×
+        </button>
+      </div>
       {thumbnail && (
         <div style={{ width: "100%", aspectRatio: "16/9", background: "#f2f2f2", overflow: "hidden" }}>
           {thumbnailType === "video" ? (
