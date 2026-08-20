@@ -94,6 +94,7 @@ const customRenderers = {
         player={player}
         contentFit="cover"
         nativeControls={true}
+        allowsFullscreen={false}
       />
     );
   },
@@ -224,12 +225,12 @@ function MediaGroupBlock({
               const itemWidth = rowHeight * item.ratio;
               return (
                 <View key={globalIndex} style={{ width: itemWidth, height: rowHeight }}>
-                {item.isVideo ? (
-                  <MediaGroupVideo url={item.url} />
-                ) : (
-                  <Image source={{ uri: item.url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
-                )}
-                {isLastWithMore && (
+                  {item.isVideo ? (
+                    <MediaGroupVideo url={item.url} />
+                  ) : (
+                    <Image source={{ uri: item.url }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                  )}
+                  {isLastWithMore && (
                     <View
                       style={{
                         position: "absolute",
@@ -269,9 +270,9 @@ function MediaGroupVideo({ url }: { url: string }) {
     <VideoView
       style={{ width: "100%", height: "100%" }}
       player={player}
-      // ===== 切り取らず、動画の全体を、そのまま表示する =====
       contentFit="contain"
       nativeControls={true}
+      allowsFullscreen={false}
     />
   );
 }
@@ -302,6 +303,7 @@ function SegmentVideo({ url, ratio }: { url: string; ratio: number }) {
         player={player}
         contentFit="cover"
         nativeControls={true}
+        allowsFullscreen={false}
       />
     </View>
   );
@@ -753,6 +755,7 @@ function ThumbnailVideo({ url, aspectRatio }: { url: string; aspectRatio: number
       player={player}
       contentFit="cover"
       nativeControls={false}
+      allowsFullscreen={false}
     />
   );
 }
@@ -766,6 +769,7 @@ function BlockVideo({ url, aspectRatio }: { url: string; aspectRatio: number }) 
       player={player}
       contentFit="contain"
       nativeControls={true}
+      allowsFullscreen={false}
     />
   );
 }
