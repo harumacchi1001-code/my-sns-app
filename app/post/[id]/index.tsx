@@ -3,7 +3,7 @@ import * as Clipboard from "expo-clipboard";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { addDoc, arrayRemove, arrayUnion, collection, doc, DocumentData, getDoc, getDocs, increment, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
@@ -57,6 +57,17 @@ const bodyRenderersProps = {
     enableExperimentalMarginCollapsing: false,
   },
 };
+// ===== キャプション（画像・動画の説明文）の、投稿詳細画面での、見た目 =====
+const bodyClassesStyles = {
+  "diary-caption": {
+    fontSize: 12,
+    lineHeight: 1,
+    color: "#999",
+    marginTop: 4,
+    marginBottom: 14,
+    textAlign: "center" as const,
+  },
+};
 const customHTMLElementModels = {
   mark: HTMLElementModel.fromCustomModel({
     tagName: "mark",
@@ -77,7 +88,6 @@ const ItalicRenderer = ({ tnode }: any) => {
 const customRenderers = {
   em: ItalicRenderer,
   i: ItalicRenderer,
-  // ===== 保険：古い形式の投稿など、単独の<video>タグが、そのまま残っている場合の、表示 =====
   video: ({ tnode }: any) => {
     const src = tnode.attributes?.src || "";
     const player = useVideoPlayer(src, (p) => {
@@ -105,14 +115,10 @@ const DEFAULT_VIDEO_RATIO = 16 / 9;
 const DEFAULT_THUMBNAIL_RATIO = 16 / 9;
 const isWeb = Platform.OS === "web";
 const CONTENT_MAX_WIDTH = 630;
-
-// ===== ここから：本文HTMLの中から、画像・動画グループを、あらかじめ、取り出す仕組み =====
 type BodySegment =
   | { type: "html"; content: string }
   | { type: "imageGroup"; items: { url: string; ratio: number; isVideo: boolean }[] }
   | { type: "video"; url: string; ratio: number };
-
-// ===== 開いたタグと、対応する閉じタグの、位置を、深さを数えながら、正確に見つける =====
 function findMatchingDivEnd(html: string, searchStartIndex: number): number {
   let depth = 1;
   let pos = searchStartIndex;
@@ -130,7 +136,6 @@ function findMatchingDivEnd(html: string, searchStartIndex: number): number {
   }
   return pos;
 }
-
 function splitBodyIntoSegments(html: string): BodySegment[] {
   if (!html) return [];
   const segments: BodySegment[] = [];
@@ -141,17 +146,14 @@ function splitBodyIntoSegments(html: string): BodySegment[] {
     const startTag = match[0];
     const startIndex = match.index;
     const endIndex = findMatchingDivEnd(html, openRegex.lastIndex);
-
     const beforeText = html.slice(cursor, startIndex);
     if (beforeText.trim()) {
       segments.push({ type: "html", content: beforeText });
     }
-
     const getAttr = (name: string) => {
       const m = startTag.match(new RegExp(`${name}="([^"]*)"`));
       return m ? m[1] : "";
     };
-
     if (match[1] === "image-group") {
       const urls = getAttr("data-urls").split(",").filter(Boolean);
       const ratios = getAttr("data-ratios").split(",").map((r) => parseFloat(r) || 1);
@@ -171,7 +173,6 @@ function splitBodyIntoSegments(html: string): BodySegment[] {
         ratio: parseFloat(getAttr("data-ratio")) || DEFAULT_VIDEO_RATIO,
       });
     }
-
     cursor = endIndex;
     openRegex.lastIndex = endIndex;
   }
@@ -181,15 +182,14 @@ function splitBodyIntoSegments(html: string): BodySegment[] {
   }
   return segments;
 }
-// ===== ここまで =====
-
-// ===== 画像・動画グループを、確実に、正しいレイアウトで、表示する、専用の部品 =====
 function MediaGroupBlock({
   items,
   containerWidth,
+  onOpenLightbox,
 }: {
   items: { url: string; ratio: number; isVideo: boolean }[];
   containerWidth: number;
+  onOpenLightbox: (items: { url: string; isVideo: boolean }[], index: number) => void;
 }) {
   const displayItems = items.slice(0, 4);
   const remaining = items.length - displayItems.length;
@@ -198,12 +198,10 @@ function MediaGroupBlock({
     rows.push(displayItems.slice(i, i + 2));
   }
   const GAP = 3;
-  // ===== 画像が、極端に縦長のときに、行が、無限に高くならないよう、上限を、決めておく =====
   const MAX_ROW_HEIGHT = 260;
   return (
     <View style={{ gap: GAP, borderRadius: 8, overflow: "hidden", marginVertical: 10 }}>
       {rows.map((row, rowIndex) => {
-        // ===== この行の、合計の比率から、画面の幅に、ぴったり収まる「高さ」を、逆算する =====
         const sumRatio = row.reduce((s, it) => s + it.ratio, 0);
         const totalGap = GAP * (row.length - 1);
         const rawHeight = (containerWidth - totalGap) / sumRatio;
@@ -224,7 +222,17 @@ function MediaGroupBlock({
               const isLastWithMore = globalIndex === displayItems.length - 1 && remaining > 0;
               const itemWidth = rowHeight * item.ratio;
               return (
-                <View key={globalIndex} style={{ width: itemWidth, height: rowHeight }}>
+                <TouchableOpacity
+                  key={globalIndex}
+                  activeOpacity={0.9}
+                  style={{ width: itemWidth, height: rowHeight }}
+                  onPress={() =>
+                    onOpenLightbox(
+                      items.map((i) => ({ url: i.url, isVideo: i.isVideo })),
+                      globalIndex
+                    )
+                  }
+                >
                   {item.isVideo ? (
                     <MediaGroupVideo url={item.url} />
                   ) : (
@@ -246,7 +254,7 @@ function MediaGroupBlock({
                       <Text style={{ color: "#fff", fontSize: 20, fontWeight: "600" }}>+{remaining}</Text>
                     </View>
                   )}
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -255,8 +263,6 @@ function MediaGroupBlock({
     </View>
   );
 }
-
-// ===== 画像グループの中の、動画（自動再生・操作ボタン付き） =====
 function MediaGroupVideo({ url }: { url: string }) {
   const player = useVideoPlayer(url, (p) => {
     p.loop = true;
@@ -276,9 +282,15 @@ function MediaGroupVideo({ url }: { url: string }) {
     />
   );
 }
-
-// ===== 単体の、動画ブロック（自動再生・操作ボタン付き） =====
-function SegmentVideo({ url, ratio }: { url: string; ratio: number }) {
+function SegmentVideo({
+  url,
+  ratio,
+  onOpenLightbox,
+}: {
+  url: string;
+  ratio: number;
+  onOpenLightbox: (items: { url: string; isVideo: boolean }[], index: number) => void;
+}) {
   const player = useVideoPlayer(url, (p) => {
     p.loop = true;
     p.muted = true;
@@ -288,7 +300,8 @@ function SegmentVideo({ url, ratio }: { url: string; ratio: number }) {
     player.play();
   }, [player]);
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.9}
       style={{
         width: "100%",
         aspectRatio: ratio,
@@ -297,6 +310,7 @@ function SegmentVideo({ url, ratio }: { url: string; ratio: number }) {
         marginVertical: 10,
         backgroundColor: "#000",
       }}
+      onPress={() => onOpenLightbox([{ url, isVideo: true }], 0)}
     >
       <VideoView
         style={{ width: "100%", height: "100%" }}
@@ -305,29 +319,54 @@ function SegmentVideo({ url, ratio }: { url: string; ratio: number }) {
         nativeControls={true}
         allowsFullscreen={false}
       />
-    </View>
+    </TouchableOpacity>
   );
 }
-
-// ===== 本文（HTML）を、安全に、区切って、表示する、共通の部品 =====
 function RenderBody({
   html,
   tagsStyles,
   contentWidth,
+  onOpenLightbox,
 }: {
   html: string;
   tagsStyles: any;
   contentWidth: number;
+  onOpenLightbox: (items: { url: string; isVideo: boolean }[], index: number) => void;
 }) {
   const segments = splitBodyIntoSegments(html || "");
+  const renderers = {
+    ...customRenderers,
+    img: ({ tnode }: any) => {
+      const src = tnode.attributes?.src || "";
+      const ratio = parseFloat(tnode.attributes?.["data-ratio"]) || DEFAULT_IMAGE_RATIO;
+      return (
+        <TouchableOpacity activeOpacity={0.9} onPress={() => onOpenLightbox([{ url: src, isVideo: false }], 0)}>
+          <Image
+            source={{ uri: src }}
+            style={{ width: contentWidth, aspectRatio: ratio, borderRadius: 8, marginVertical: 10 }}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      );
+    },
+  };
   return (
     <>
       {segments.map((segment, index) => {
         if (segment.type === "imageGroup") {
-          return <MediaGroupBlock key={index} items={segment.items} containerWidth={contentWidth} />;
+          return (
+            <MediaGroupBlock
+              key={index}
+              items={segment.items}
+              containerWidth={contentWidth}
+              onOpenLightbox={onOpenLightbox}
+            />
+          );
         }
         if (segment.type === "video") {
-          return <SegmentVideo key={index} url={segment.url} ratio={segment.ratio} />;
+          return (
+            <SegmentVideo key={index} url={segment.url} ratio={segment.ratio} onOpenLightbox={onOpenLightbox} />
+          );
         }
         return (
           <RenderHtml
@@ -335,17 +374,17 @@ function RenderBody({
             contentWidth={contentWidth}
             source={{ html: segment.content }}
             tagsStyles={tagsStyles}
+            classesStyles={bodyClassesStyles}
             renderersProps={bodyRenderersProps}
             customHTMLElementModels={customHTMLElementModels}
             enableCSSInlineProcessing={true}
-            renderers={customRenderers}
+            renderers={renderers}
           />
         );
       })}
     </>
   );
 }
-
 export default function PostDetailScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -358,6 +397,14 @@ export default function PostDetailScreen() {
   const [commentCount, setCommentCount] = useState(0);
   const [shareMenuVisible, setShareMenuVisible] = useState(false);
   const [authorStories, setAuthorStories] = useState<DocumentData[]>([]);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxItems, setLightboxItems] = useState<{ url: string; isVideo: boolean }[]>([]);
+  const [lightboxStartIndex, setLightboxStartIndex] = useState(0);
+  const openLightbox = (items: { url: string; isVideo: boolean }[], startIndex: number) => {
+    setLightboxItems(items);
+    setLightboxStartIndex(startIndex);
+    setLightboxVisible(true);
+  };
   useEffect(() => {
     if (!id) return;
     const postRef = doc(db, "posts", id);
@@ -573,14 +620,24 @@ export default function PostDetailScreen() {
           </View>
           <ScrollView>
             {post.thumbnailUrl && (
-              post.thumbnailType === "video" ? (
-                <ThumbnailVideo url={post.thumbnailUrl} aspectRatio={thumbnailAspectRatio} />
-              ) : (
-                <Image
-                  source={{ uri: post.thumbnailUrl }}
-                  style={[styles.thumbnail, { aspectRatio: thumbnailAspectRatio }]}
-                />
-              )
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() =>
+                  openLightbox(
+                    [{ url: post.thumbnailUrl, isVideo: post.thumbnailType === "video" }],
+                    0
+                  )
+                }
+              >
+                {post.thumbnailType === "video" ? (
+                  <ThumbnailVideo url={post.thumbnailUrl} aspectRatio={thumbnailAspectRatio} />
+                ) : (
+                  <Image
+                    source={{ uri: post.thumbnailUrl }}
+                    style={[styles.thumbnail, { aspectRatio: thumbnailAspectRatio }]}
+                  />
+                )}
+              </TouchableOpacity>
             )}
             <View style={styles.content}>
               <Text style={styles.title}>{post.title || t("postDetail.noTitle")}</Text>
@@ -661,23 +718,33 @@ export default function PostDetailScreen() {
                 post.contentBlocks.map((block: any, index: number) => {
                   if (block.type === "image") {
                     return (
-                      <Image
+                      <TouchableOpacity
                         key={index}
-                        source={{ uri: block.url }}
-                        style={[
-                          styles.blockImage,
-                          { aspectRatio: block.aspectRatio || DEFAULT_IMAGE_RATIO },
-                        ]}
-                      />
+                        activeOpacity={0.9}
+                        onPress={() => openLightbox([{ url: block.url, isVideo: false }], 0)}
+                      >
+                        <Image
+                          source={{ uri: block.url }}
+                          style={[
+                            styles.blockImage,
+                            { aspectRatio: block.aspectRatio || DEFAULT_IMAGE_RATIO },
+                          ]}
+                        />
+                      </TouchableOpacity>
                     );
                   }
                   if (block.type === "video") {
                     return (
-                      <BlockVideo
+                      <TouchableOpacity
                         key={index}
-                        url={block.url}
-                        aspectRatio={block.aspectRatio || DEFAULT_VIDEO_RATIO}
-                      />
+                        activeOpacity={0.9}
+                        onPress={() => openLightbox([{ url: block.url, isVideo: true }], 0)}
+                      >
+                        <BlockVideo
+                          url={block.url}
+                          aspectRatio={block.aspectRatio || DEFAULT_VIDEO_RATIO}
+                        />
+                      </TouchableOpacity>
                     );
                   }
                   return (
@@ -686,6 +753,7 @@ export default function PostDetailScreen() {
                       html={block.html || ""}
                       tagsStyles={dynamicBodyTagsStyles}
                       contentWidth={renderHtmlWidth}
+                      onOpenLightbox={openLightbox}
                     />
                   );
                 })
@@ -694,6 +762,7 @@ export default function PostDetailScreen() {
                   html={post.body || ""}
                   tagsStyles={dynamicBodyTagsStyles}
                   contentWidth={renderHtmlWidth}
+                  onOpenLightbox={openLightbox}
                 />
               )}
               </View>
@@ -739,6 +808,12 @@ export default function PostDetailScreen() {
             </View>
           </TouchableWithoutFeedback>
         </Modal>
+        <MediaLightbox
+          visible={lightboxVisible}
+          items={lightboxItems}
+          startIndex={lightboxStartIndex}
+          onClose={() => setLightboxVisible(false)}
+        />
       </SafeAreaView>
     </>
   );
@@ -766,6 +841,105 @@ function BlockVideo({ url, aspectRatio }: { url: string; aspectRatio: number }) 
   return (
     <VideoView
       style={[styles.blockImage, { aspectRatio }]}
+      player={player}
+      contentFit="contain"
+      nativeControls={true}
+      allowsFullscreen={false}
+    />
+  );
+}
+function MediaLightbox({
+  visible,
+  items,
+  startIndex,
+  onClose,
+}: {
+  visible: boolean;
+  items: { url: string; isVideo: boolean }[];
+  startIndex: number;
+  onClose: () => void;
+}) {
+  const { width, height } = useWindowDimensions();
+  const scrollRef = useRef<ScrollView>(null);
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const [downloading, setDownloading] = useState(false);
+  useEffect(() => {
+    if (visible) {
+      setCurrentIndex(startIndex);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ x: startIndex * width, animated: false });
+      });
+    }
+  }, [visible, startIndex, width]);
+  const handleDownload = async () => {
+    if (!isWeb || downloading) return;
+    const current = items[currentIndex];
+    if (!current) return;
+    setDownloading(true);
+    try {
+      const response = await fetch(current.url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      const extension = current.isVideo ? "mp4" : "jpg";
+      link.download = `download_${Date.now()}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      console.log("ダウンロードエラー:", error);
+    } finally {
+      setDownloading(false);
+    }
+  };
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <TouchableOpacity onPress={onClose} style={styles.lightboxCloseButton}>
+          <MaterialIcons name="close" size={24} color="#fff" />
+        </TouchableOpacity>
+        {isWeb && (
+          <TouchableOpacity onPress={handleDownload} style={styles.lightboxDownloadButton} disabled={downloading}>
+            {downloading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <MaterialIcons name="download" size={22} color="#fff" />
+            )}
+          </TouchableOpacity>
+        )}
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+            setCurrentIndex(newIndex);
+          }}
+        >
+          {items.map((item, index) => (
+            <View key={index} style={{ width, height, justifyContent: "center", alignItems: "center" }}>
+              {item.isVideo ? (
+                <LightboxVideo url={item.url} width={width} height={height} />
+              ) : (
+                <Image source={{ uri: item.url }} style={{ width, height }} resizeMode="contain" />
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+function LightboxVideo({ url, width, height }: { url: string; width: number; height: number }) {
+  const player = useVideoPlayer(url, (p) => {
+    p.loop = true;
+  });
+  return (
+    <VideoView
+      style={{ width, height }}
       player={player}
       contentFit="contain"
       nativeControls={true}
@@ -913,5 +1087,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#e74c3c",
     fontWeight: "600",
+  },
+  lightboxCloseButton: {
+    position: "absolute",
+    top: 44,
+    right: 16,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  lightboxDownloadButton: {
+    position: "absolute",
+    top: 44,
+    right: 62,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

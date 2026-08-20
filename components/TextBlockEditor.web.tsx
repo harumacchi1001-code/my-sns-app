@@ -1,4 +1,4 @@
-import { mergeAttributes, Node } from "@tiptap/core";
+import { Extension, mergeAttributes, Node } from "@tiptap/core";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import ImageExtension from "@tiptap/extension-image";
@@ -8,10 +8,128 @@ import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Underline from "@tiptap/extension-underline";
+import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+
+// ===== 画像・動画と、キャプションを、結びつけるための、ランダムな合言葉を作る =====
+const generateMediaId = () => Math.random().toString(36).slice(2);
+
+// ===== 画像に、実際の縦横比・合言葉を、記録できるよう、標準の機能を、拡張する =====
+const ImageWithRatio = ImageExtension.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      ratio: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-ratio"),
+        renderHTML: (attributes) => {
+          if (!attributes.ratio) return {};
+          return { "data-ratio": attributes.ratio };
+        },
+      },
+      mediaId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-media-id"),
+        renderHTML: (attributes) => {
+          if (!attributes.mediaId) return {};
+          return { "data-media-id": attributes.mediaId };
+        },
+      },
+    };
+  },
+});
+
+// ===== 段落に、「これは、キャプションです」「どの画像・動画の、キャプションか」の、目印を、付けられるようにする =====
+const ParagraphCaptionAttribute = Extension.create({
+  name: "paragraphCaptionAttribute",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph"],
+        attributes: {
+          caption: {
+            default: null,
+            parseHTML: (element) => element.getAttribute("data-caption"),
+            renderHTML: (attributes) => {
+              if (!attributes.caption) return {};
+              return { "data-caption": "true", class: "diary-caption" };
+            },
+          },
+          captionFor: {
+            default: null,
+            parseHTML: (element) => element.getAttribute("data-caption-for"),
+            renderHTML: (attributes) => {
+              if (!attributes.captionFor) return {};
+              return { "data-caption-for": attributes.captionFor };
+            },
+          },
+        },
+      },
+    ];
+  },
+  // ===== キャプション欄の中で、Enter・Backspaceキーが、押されたときの、専用の動き =====
+  addKeyboardShortcuts() {
+    return {
+      // ===== キャプション欄が、完全に空っぽのときだけ、Backspaceで、行自体が消えるのを、防ぐ =====
+      Backspace: ({ editor }) => {
+        const { selection, doc } = editor.state;
+        const { $from, empty } = selection;
+        const currentNode = $from.parent;
+
+        // ===== 今、いる場所が、キャプション欄でなければ、通常どおりのBackspaceに、任せる =====
+        if (!currentNode.attrs?.caption) return false;
+
+        // ===== カーソルが、キャプション欄の、一番、はじめに、なければ、通常どおり、1文字、消す =====
+        const isAtStart = empty && $from.parentOffset === 0;
+        if (!isAtStart) return false;
+
+        // ===== このキャプション（複数行に、またがっている場合も、含めて）全体が、完全に空かを、確認する =====
+        const captionStart = $from.start(-1);
+        const captionEnd = $from.end(-1);
+        const wholeCaptionText = doc.textBetween(
+          Math.min(captionStart, $from.before()),
+          $from.after() > captionEnd ? captionEnd : $from.after()
+        );
+
+        // ===== 何か、文字が、残っていれば、通常どおりのBackspaceに、任せる（前の行と、くっつく、など） =====
+        if (wholeCaptionText.trim() !== "") return false;
+
+        // ===== 完全に、空っぽのときだけ、何もしない（行が、消えるのを、防ぐ） =====
+        return true;
+      },
+      Enter: ({ editor }) => {
+        const { selection, doc } = editor.state;
+        const { $from } = selection;
+        const currentNode = $from.parent;
+
+        // ===== 今、いる場所が、キャプション欄でなければ、通常どおりのEnterに、任せる =====
+        if (!currentNode.attrs?.caption) return false;
+
+        // ===== 今の行（段落）が、空っぽかどうかを、判定する =====
+        const isCurrentLineEmpty = $from.parent.textContent.trim() === "";
+
+        if (!isCurrentLineEmpty) {
+          // ===== 何か、書かれていれば、キャプション欄の中で、自由に、改行させる =====
+          return editor.commands.splitBlock();
+        }
+
+        // ===== 空っぽの、行で、Enterが、押されたら、キャプション欄を抜けて、本文（普通の段落）に、移動する =====
+        const endOfCaption = $from.after();
+        const insertPos = endOfCaption;
+        editor
+          .chain()
+          .insertContentAt(insertPos, { type: "paragraph" })
+          .setTextSelection(insertPos + 1)
+          .run();
+        return true;
+      },
+    };
+  },
+});
+
 // ===== 動画を、文章の中の、1つの要素として、新しく定義する =====
 const VideoBlock = Node.create({
   name: "videoBlock",
@@ -29,6 +147,14 @@ const VideoBlock = Node.create({
         parseHTML: (element) => parseFloat(element.getAttribute("data-ratio") || "") || 16 / 9,
         renderHTML: (attributes) => ({ "data-ratio": attributes.ratio }),
       },
+      mediaId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-media-id"),
+        renderHTML: (attributes) => {
+          if (!attributes.mediaId) return {};
+          return { "data-media-id": attributes.mediaId };
+        },
+      },
     };
   },
   parseHTML() {
@@ -39,7 +165,11 @@ const VideoBlock = Node.create({
     const ratio = HTMLAttributes.ratio || HTMLAttributes["data-ratio"] || 16 / 9;
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-video-block": "true", class: "diary-video-block", style: `aspect-ratio: ${ratio};` }),
+      mergeAttributes(HTMLAttributes, {
+        "data-video-block": "true",
+        class: "diary-video-block",
+        style: `aspect-ratio: ${ratio};`,
+      }),
       ["video", { src: url, controls: "true" }],
     ];
   },
@@ -65,6 +195,14 @@ const ImageGroup = Node.create({
         default: "",
         parseHTML: (element) => element.getAttribute("data-types"),
         renderHTML: (attributes) => ({ "data-types": attributes.types }),
+      },
+      mediaId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-media-id"),
+        renderHTML: (attributes) => {
+          if (!attributes.mediaId) return {};
+          return { "data-media-id": attributes.mediaId };
+        },
       },
     };
   },
@@ -100,7 +238,11 @@ const ImageGroup = Node.create({
     }
     return [
       "div",
-      mergeAttributes(HTMLAttributes, { "data-image-group": "true", class: "diary-image-group" }),
+      mergeAttributes(HTMLAttributes, {
+        "data-image-group": "true",
+        class: "diary-image-group",
+        ...(HTMLAttributes.mediaId ? { "data-media-id": HTMLAttributes.mediaId } : {}),
+      }),
       ...rows.map((row) => [
         "div",
         { class: "diary-image-row" },
@@ -120,6 +262,38 @@ const ImageGroup = Node.create({
     ];
   },
 });
+// ===== 画像・動画が、削除されたら、対応するキャプションも、自動で、削除する、見張り番 =====
+const CaptionSync = Extension.create({
+  name: "captionSync",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        appendTransaction: (transactions, oldState, newState) => {
+          if (!transactions.some((tr) => tr.docChanged)) return null;
+          // ===== 今、文章の中に、実際に、存在している、画像・動画の、合言葉、一覧を作る =====
+          const existingIds = new Set<string>();
+          newState.doc.descendants((node) => {
+            if (["image", "videoBlock", "imageGroup"].includes(node.type.name) && node.attrs.mediaId) {
+              existingIds.add(node.attrs.mediaId);
+            }
+          });
+          // ===== 対応する、画像・動画が、もう、存在しない、キャプションを、探して、削除する =====
+          let tr = newState.tr;
+          let modified = false;
+          newState.doc.descendants((node, pos) => {
+            if (node.type.name === "paragraph" && node.attrs.captionFor && !existingIds.has(node.attrs.captionFor)) {
+              const mappedPos = tr.mapping.map(pos);
+              tr.delete(mappedPos, mappedPos + node.nodeSize);
+              modified = true;
+            }
+          });
+          return modified ? tr : null;
+        },
+      }),
+    ];
+  },
+});
+
 export type TextBlockEditorHandle = {
   getHTML: () => Promise<string>;
 };
@@ -229,12 +403,27 @@ const EDITOR_CSS = `
   .diary-tiptap-content hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
   .diary-tiptap-content ul[data-type="taskList"] { list-style: none; padding-left: 4px; }
   .diary-tiptap-content > img { max-width: none; width: calc(100% + 36px); margin: 10px -18px; border-radius: 8px; display: block; }
+  .diary-tiptap-content p.is-empty::before,
   .diary-tiptap-content p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
     float: left;
     color: #bbb;
     pointer-events: none;
     height: 0;
+  }
+  /* ===== キャプション欄だけは、案内文も、中央揃えにする ===== */
+  .diary-tiptap-content p[data-caption].is-empty::before {
+    float: none;
+    display: block;
+    text-align: center;
+  }
+  /* ===== キャプション（画像・動画の説明文）の、見た目：本文より、小さく、グレーに、中央揃え ===== */
+  .diary-tiptap-content p[data-caption] {
+    font-size: 12px;
+    line-height: 0.3;
+    color: #999;
+    margin: 4px 0 14px;
+    text-align: center;
   }
 `;
 const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
@@ -251,7 +440,6 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
     const [, forceUpdate] = useState(0);
     const [toolbarPosition, setToolbarPosition] = useState<{ top: number; left: number } | null>(null);
 
-    // ===== ツールバーの、横方向の位置を、画面の余白（本文エリアの、外側）に、固定するための、調整値 =====
     const TOOLBAR_OFFSET_X = 56;
 
     const editor = useEditor({
@@ -264,12 +452,20 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
         Color,
         Highlight.configure({ multicolor: true }),
         Link.configure({ openOnClick: false }),
-        ImageExtension,
+        ImageWithRatio,
         ImageGroup,
         VideoBlock,
         TaskList,
         TaskItem.configure({ nested: true }),
-        Placeholder.configure({ placeholder: "Write something …" }),
+        ParagraphCaptionAttribute,
+        CaptionSync,
+        Placeholder.configure({
+          // ===== キャプション欄と、通常の文章とで、表示される、案内文を、変える =====
+          placeholder: ({ node }: any) => {
+            if (node.attrs?.caption) return "キャプション文を入力";
+            return "Write something …";
+          },
+        }),
       ],
       content: initialContent,
       editorProps: {
@@ -361,28 +557,43 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
               action: async () => {
                 const items = await onPickMedia();
                 if (!items || items.length === 0) return;
+                // ===== この、画像・動画専用の、合言葉を、1つ、発行する =====
+                const mediaId = generateMediaId();
+                const captionParagraph = { type: "paragraph", attrs: { caption: true, captionFor: mediaId } };
                 if (items.length === 1) {
                   const item = items[0];
                   if (item.type === "video") {
                     (editor.chain().focus() as any)
-                      .insertContent({ type: "videoBlock", attrs: { url: item.url, ratio: item.ratio } })
+                      .insertContent([
+                        { type: "videoBlock", attrs: { url: item.url, ratio: item.ratio, mediaId } },
+                        captionParagraph,
+                      ])
                       .run();
                   } else {
-                    editor.chain().focus().setImage({ src: item.url }).run();
+                    (editor.chain().focus() as any)
+                      .insertContent([
+                        { type: "image", attrs: { src: item.url, ratio: item.ratio, mediaId } },
+                        captionParagraph,
+                      ])
+                      .run();
                   }
-                  editor.commands.setTextSelection(editor.state.doc.content.size);
-                  return;
+                } else {
+                  (editor.chain().focus() as any)
+                    .insertContent([
+                      {
+                        type: "imageGroup",
+                        attrs: {
+                          urls: items.map((i) => i.url).join(","),
+                          ratios: items.map((i) => i.ratio.toFixed(3)).join(","),
+                          types: items.map((i) => (i.type === "video" ? "v" : "i")).join(","),
+                          mediaId,
+                        },
+                      },
+                      captionParagraph,
+                    ])
+                    .run();
                 }
-                (editor.chain().focus() as any)
-                  .insertContent({
-                    type: "imageGroup",
-                    attrs: {
-                      urls: items.map((i) => i.url).join(","),
-                      ratios: items.map((i) => i.ratio.toFixed(3)).join(","),
-                      types: items.map((i) => (i.type === "video" ? "v" : "i")).join(","),
-                    },
-                  })
-                  .run();
+                // ===== 挿入後、確実に、カーソルを、キャプション欄の中に、移動させる =====
                 editor.commands.setTextSelection(editor.state.doc.content.size);
               },
             },

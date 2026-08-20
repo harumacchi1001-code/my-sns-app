@@ -98,6 +98,15 @@ const PREVIEW_CSS = `
     height: 100%;
     display: block;
   }
+  /* ===== キャプション（画像・動画の説明文）の、見た目 ===== */
+  .diary-preview-body .diary-caption {
+    font-size: 10px;
+    line-height: 1.1;
+    color: #999;
+    margin-top: 2px;
+    margin-bottom: 10px;
+    text-align: center;
+  }
 `;
 
 export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hashtags, bodyHtml }: Props) {
