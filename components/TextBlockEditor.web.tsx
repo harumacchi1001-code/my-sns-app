@@ -322,6 +322,11 @@ const TEXT_COLORS = [
   { label: "緑", color: "#2ecc71" },
   { label: "紫", color: "#9b59b6" },
   { label: "橙", color: "#f39c12" },
+  { label: "白", color: "#eeeeee" },
+  { label: "茶", color: "#8a5a2c" },
+  { label: "グレー", color: "#757575" },
+  { label: "ネイビー", color: "#34495e" },
+  { label: "ワインレッド", color: "#8e3b46" },
 ];
 // ===== 選ばれた配色テーマに応じて、見出し・引用・リスト・キャプション・リンクの色を、組み立てる =====
 const buildThemeCss = (themeId?: string | null) => {
@@ -463,6 +468,10 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
     const [themeMenuVisible, setThemeMenuVisible] = useState(false);
     const [themeMenuPosition, setThemeMenuPosition] = useState({ top: 100, left: 50 });
     const [, forceUpdate] = useState(0);
+    const [toolbarColors, setToolbarColors] = useState<{ text: string | null; highlight: string | null }>({
+      text: null,
+      highlight: null,
+    });
     const [toolbarPosition, setToolbarPosition] = useState<{ top: number; left: number } | null>(null);
 
     const TOOLBAR_OFFSET_X = 56;
@@ -505,6 +514,10 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
       },
       onTransaction: ({ editor: currentEditor }) => {
         forceUpdate((n) => n + 1);
+        setToolbarColors({
+          text: currentEditor.getAttributes("textStyle").color || null,
+          highlight: currentEditor.getAttributes("highlight").color || null,
+        });
         try {
           const { from } = currentEditor.state.selection;
           const coords = currentEditor.view.coordsAtPos(from);
@@ -552,10 +565,12 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
     }
     const applyHighlight = (color: string) => {
       editor.chain().focus().extendMarkRange("highlight").setHighlight({ color }).run();
+      setToolbarColors((prev) => ({ ...prev, highlight: color }));
       setColorMenuVisible(false);
     };
     const applyTextColor = (color: string) => {
       editor.chain().focus().extendMarkRange("textStyle").setColor(color).run();
+      setToolbarColors((prev) => ({ ...prev, text: color }));
       setTextColorMenuVisible(false);
     };
     const openLinkMenu = (event?: any) => {
@@ -652,9 +667,13 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
       { icon: "U", label: "下線", action: () => editor.chain().focus().toggleUnderline().run() },
       { icon: "S", label: "打ち消し線", action: () => editor.chain().focus().toggleStrike().run() },
     ];
-    const activeTextColor = editor.getAttributes("textStyle").color;
-    const activeHighlightColor = editor.getAttributes("highlight").color;
+    // ===== ユーザーが、まだ、何も文字色を選んでいなければ、今の配色テーマの、初期文字色を、代わりに使う =====
+    const themeDefaultTextColor = themeId ? getColorTheme(themeId as any).text : null;
+    const activeTextColor = toolbarColors.text ?? themeDefaultTextColor;
+    const activeHighlightColor = toolbarColors.highlight;
     const hasActiveLink = editor.isActive("link");
+    console.log("画面が描かれた瞬間の色:", activeTextColor);
+    console.log("今の文字色:", activeTextColor);
     return (
       <View style={styles.container}>
         <View style={styles.richTextWrapper}>
@@ -777,6 +796,7 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
                 style={styles.colorMenuCancel}
                 onPress={() => {
                   editor.chain().focus().unsetHighlight().run();
+                  setToolbarColors((prev) => ({ ...prev, highlight: null }));
                   setColorMenuVisible(false);
                 }}
               >
@@ -819,6 +839,7 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
                 style={styles.colorMenuCancel}
                 onPress={() => {
                   editor.chain().focus().unsetColor().run();
+                  setToolbarColors((prev) => ({ ...prev, text: null }));
                   setTextColorMenuVisible(false);
                 }}
               >

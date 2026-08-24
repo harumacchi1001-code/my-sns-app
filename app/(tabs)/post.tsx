@@ -80,8 +80,8 @@ export default function PostScreen() {
   // ===== 本文（見出し・画像なども含む、1つの、連続した文章）は、ここで管理する =====
   const mainEditorRef = useRef<TextBlockEditorHandle | null>(null);
   const [initialBodyContent, setInitialBodyContent] = useState("");
-  // ===== 自由入力モードでの、記事全体の、配色テーマ（ツールバーから、選ぶ） =====
-  const [freeWriteThemeId, setFreeWriteThemeId] = useState<string>("");
+  // ===== 自由入力モードでの、記事全体の、配色テーマ（ツールバーから、選ぶ。必ず、いずれかのテーマが、選ばれた状態にする） =====
+  const [freeWriteThemeId, setFreeWriteThemeId] = useState<string>("simple");
   // ===== 自由入力モードで、選ばれている、配色の、実際のデータ =====
   const freeWriteTheme = freeWriteThemeId ? getColorTheme(freeWriteThemeId as ColorThemeId) : null;
   // ===== プレビューパネルに、リアルタイムで反映するための、本文の中身 =====
@@ -106,6 +106,7 @@ export default function PostScreen() {
     setVideoBlocks([]);
     setEditorKey((k) => k + 1);
     setTemplateValues({});
+    setFreeWriteThemeId("simple");
     router.setParams({ draftId: undefined });
   };
   useFocusEffect(
@@ -542,7 +543,7 @@ export default function PostScreen() {
             {COLOR_THEMES.map((t) => (
               <TouchableOpacity
                 key={t.id}
-                onPress={() => setFreeWriteThemeId(freeWriteThemeId === t.id ? "" : t.id)}
+                onPress={() => setFreeWriteThemeId(t.id)}
                 style={[
                   styles.headerThemeDot,
                   // ===== 丸の中身は、そのテーマの、実際の背景色。枠は、そのテーマの、文字色 =====
