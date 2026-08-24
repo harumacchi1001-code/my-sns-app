@@ -598,9 +598,11 @@ export default function PostDetailScreen() {
   const savedByMe = !!myEmail && !!post.savedBy?.includes(myEmail);
   const isMyPost = !!myEmail && myEmail === post.authorEmail;
   const authorHasUnread = authorStories.some((s) => !(s.viewedBy || []).includes(myUid));
-  const renderHtmlWidth = isWeb ? Math.min(width, CONTENT_MAX_WIDTH) - 36 : width - 36;
-  const thumbnailAspectRatio = post.thumbnailAspectRatio || DEFAULT_THUMBNAIL_RATIO;
+  // ===== 配色テーマが、あるときは、画面の幅から「左右の外側の余白(18×2)」と「内側のpadding(14×2)」を引く。ないときは、これまでどおり =====
+  const outerMargin = isWeb ? Math.min(width, CONTENT_MAX_WIDTH) : width;
   const templateTheme = post.templateThemeId ? getColorTheme(post.templateThemeId) : null;
+  const renderHtmlWidth = templateTheme ? outerMargin - 36 - 28 : outerMargin - 36;
+  const thumbnailAspectRatio = post.thumbnailAspectRatio || DEFAULT_THUMBNAIL_RATIO;
   const dynamicBodyTagsStyles = templateTheme
     ? {
         ...bodyTagsStyles,
@@ -619,101 +621,112 @@ export default function PostDetailScreen() {
             </TouchableOpacity>
           </View>
           <ScrollView>
-            {post.thumbnailUrl && (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() =>
-                  openLightbox(
-                    [{ url: post.thumbnailUrl, isVideo: post.thumbnailType === "video" }],
-                    0
-                  )
-                }
-              >
-                {post.thumbnailType === "video" ? (
-                  <ThumbnailVideo url={post.thumbnailUrl} aspectRatio={thumbnailAspectRatio} />
-                ) : (
-                  <Image
-                    source={{ uri: post.thumbnailUrl }}
-                    style={[styles.thumbnail, { aspectRatio: thumbnailAspectRatio }]}
-                  />
-                )}
-              </TouchableOpacity>
-            )}
-            <View style={styles.content}>
-              <Text style={styles.title}>{post.title || t("postDetail.noTitle")}</Text>
-              <View style={styles.metaAndActionsRow}>
-                <View style={styles.metaRow}>
-                  <TouchableOpacity onPress={handleAuthorAvatarPress}>
-                    <StampFrame
-                      size={30}
-                      imageUri={author?.photoUrl || null}
-                      borderColor="#888"
-                      frameThickness={authorStories.length > 0 && authorHasUnread ? 3 : 1}
-                      gradientColors={
-                        authorStories.length > 0 && authorHasUnread
-                          ? ["#3D8BFF", "#7B3DFF"]
-                          : undefined
-                      }
-                      notchesPerSide={4}
-                      notchRadius={1.5}
+            <View
+              style={
+                templateTheme
+                  ? {
+                      backgroundColor: templateTheme.background,
+                      marginHorizontal: 18,
+                      marginTop: 10,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: templateTheme.border,
+                      overflow: "hidden",
+                    }
+                  : undefined
+              }
+            >
+              {/* ===== サムネイル：配色があるときは、色付きエリアの、中に含める ===== */}
+              {post.thumbnailUrl && (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    openLightbox(
+                      [{ url: post.thumbnailUrl, isVideo: post.thumbnailType === "video" }],
+                      0
+                    )
+                  }
+                >
+                  {post.thumbnailType === "video" ? (
+                    <ThumbnailVideo url={post.thumbnailUrl} aspectRatio={thumbnailAspectRatio} />
+                  ) : (
+                    <Image
+                      source={{ uri: post.thumbnailUrl }}
+                      style={[
+                        templateTheme ? styles.thumbnailInTheme : styles.thumbnail,
+                        { aspectRatio: thumbnailAspectRatio },
+                      ]}
                     />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={goToAuthorProfile}>
-                    <Text style={styles.metaText}>
-                      {author?.handle || author?.username || post.authorEmail}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.actionsRow}>
-                  <TouchableOpacity style={styles.actionButton} onPress={toggleLike}>
-                    <MaterialIcons
-                      name={likedByMe ? "favorite" : "favorite-border"}
-                      size={20}
-                      color={likedByMe ? "#e74c3c" : "#666"}
-                    />
-                    <Text style={likedByMe ? styles.likedText : styles.actionText}>
-                      {likeCount}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => setCommentModalVisible(true)}
-                  >
-                    <MaterialIcons name="chat-bubble-outline" size={20} color="#666" />
-                    <Text style={styles.actionText}>{commentCount}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton} onPress={() => setShareMenuVisible(true)}>
-                    <MaterialIcons name="share" size={20} color="#666" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton} onPress={toggleSave}>
-                    <MaterialIcons
-                      name={savedByMe ? "bookmark" : "bookmark-border"}
-                      size={20}
-                      color={savedByMe ? "#4a90e2" : "#666"}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {post.hashtags && post.hashtags.length > 0 && (
-                <View style={styles.hashtagRow}>
-                  {post.hashtags.map((tag: string, index: number) => (
-                    <TouchableOpacity key={index} onPress={() => goToHashtagSearch(tag)}>
-                      <Text style={styles.hashtagText}>#{tag}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                  )}
+                </TouchableOpacity>
               )}
-              <View
-                style={[
-                  templateTheme && {
-                    backgroundColor: templateTheme.background,
-                    borderRadius: 14,
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: templateTheme.border,
-                  },
-                ]}
-              >
+              <View style={templateTheme ? { padding: 14 } : styles.content}>
+                <Text style={[styles.title, templateTheme && { color: templateTheme.text }]}>
+                  {post.title || t("postDetail.noTitle")}
+                </Text>
+                <View style={styles.metaAndActionsRow}>
+                  <View style={styles.metaRow}>
+                    <TouchableOpacity onPress={handleAuthorAvatarPress}>
+                      <StampFrame
+                        size={30}
+                        imageUri={author?.photoUrl || null}
+                        borderColor="#888"
+                        frameThickness={authorStories.length > 0 && authorHasUnread ? 3 : 1}
+                        gradientColors={
+                          authorStories.length > 0 && authorHasUnread
+                            ? ["#3D8BFF", "#7B3DFF"]
+                            : undefined
+                        }
+                        notchesPerSide={4}
+                        notchRadius={1.5}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={goToAuthorProfile}>
+                      <Text style={[styles.metaText, templateTheme && { color: templateTheme.muted }]}>
+                        {author?.handle || author?.username || post.authorEmail}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.actionsRow}>
+                    <TouchableOpacity style={styles.actionButton} onPress={toggleLike}>
+                      <MaterialIcons
+                        name={likedByMe ? "favorite" : "favorite-border"}
+                        size={20}
+                        color={likedByMe ? "#e74c3c" : templateTheme ? templateTheme.muted : "#666"}
+                      />
+                      <Text style={likedByMe ? styles.likedText : [styles.actionText, templateTheme && { color: templateTheme.muted }]}>
+                        {likeCount}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => setCommentModalVisible(true)}
+                    >
+                      <MaterialIcons name="chat-bubble-outline" size={20} color={templateTheme ? templateTheme.muted : "#666"} />
+                      <Text style={[styles.actionText, templateTheme && { color: templateTheme.muted }]}>{commentCount}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionButton} onPress={() => setShareMenuVisible(true)}>
+                      <MaterialIcons name="share" size={20} color={templateTheme ? templateTheme.muted : "#666"} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionButton} onPress={toggleSave}>
+                      <MaterialIcons
+                        name={savedByMe ? "bookmark" : "bookmark-border"}
+                        size={20}
+                        color={savedByMe ? "#4a90e2" : templateTheme ? templateTheme.muted : "#666"}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {post.hashtags && post.hashtags.length > 0 && (
+                  <View style={styles.hashtagRow}>
+                    {post.hashtags.map((tag: string, index: number) => (
+                      <TouchableOpacity key={index} onPress={() => goToHashtagSearch(tag)}>
+                        <Text style={styles.hashtagText}>#{tag}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                <View>
               {post.contentBlocks && post.contentBlocks.length > 0 ? (
                 post.contentBlocks.map((block: any, index: number) => {
                   if (block.type === "image") {
@@ -765,7 +778,10 @@ export default function PostDetailScreen() {
                   onOpenLightbox={openLightbox}
                 />
               )}
+                </View>
               </View>
+            </View>
+            <View style={styles.content}>
               {isMyPost && (
                 <TouchableOpacity
                   style={styles.insightsButton}
@@ -978,6 +994,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   thumbnail: {
+    width: "100%",
+    backgroundColor: "#f0f0f0",
+  },
+  thumbnailInTheme: {
     width: "100%",
     backgroundColor: "#f0f0f0",
   },

@@ -43,17 +43,6 @@ export const COLOR_THEMES = [
     border: "#e2e2e2",
   },
   {
-    id: "pastel",
-    name: "パステル",
-    background: "#fff8f2",
-    surface: "#ffffff",
-    accent: "#c17a3d",
-    text: "#8a5a2c",
-    muted: "#c99a6b",
-    placeholder: "#d9b892",
-    border: "#f4ddc9",
-  },
-  {
     id: "mono",
     name: "モノトーン",
     background: "#111111",
@@ -63,6 +52,17 @@ export const COLOR_THEMES = [
     muted: "#888888",
     placeholder: "#555555",
     border: "#333333",
+  },
+  {
+    id: "pastel",
+    name: "パステル",
+    background: "#fff8f2",
+    surface: "#ffffff",
+    accent: "#c17a3d",
+    text: "#8a5a2c",
+    muted: "#c99a6b",
+    placeholder: "#d9b892",
+    border: "#f4ddc9",
   },
 ] as const;
 

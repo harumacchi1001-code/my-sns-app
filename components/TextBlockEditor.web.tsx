@@ -13,6 +13,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { COLOR_THEMES, getColorTheme } from "../constants/postTemplates";
 
 // ===== 画像・動画と、キャプションを、結びつけるための、ランダムな合言葉を作る =====
 const generateMediaId = () => Math.random().toString(36).slice(2);
@@ -303,6 +304,9 @@ type Props = {
   onPickMedia?: () => Promise<{ type: "image" | "video"; url: string; ratio: number }[]>;
   onInsertVideo?: () => void;
   onContentChange?: (html: string) => void;
+  // ===== 記事全体の、配色テーマ（未選択なら、null） =====
+  themeId?: string | null;
+  onThemeChange?: (themeId: string) => void;
 };
 const HIGHLIGHT_COLORS = [
   { label: "黄", color: "#ffeb3b" },
@@ -319,6 +323,25 @@ const TEXT_COLORS = [
   { label: "紫", color: "#9b59b6" },
   { label: "橙", color: "#f39c12" },
 ];
+// ===== 選ばれた配色テーマに応じて、見出し・引用・リスト・キャプション・リンクの色を、組み立てる =====
+const buildThemeCss = (themeId?: string | null) => {
+  if (!themeId) return "";
+  const theme = getColorTheme(themeId as any);
+  const textColor = theme.text;
+  const mutedColor = theme.muted;
+  const captionColor = theme.muted;
+  const accentColor = theme.accent;
+  const borderColor = theme.border;
+  return `
+    .diary-tiptap-content.diary-tiptap-content, .diary-tiptap-content.diary-tiptap-content p { color: ${textColor} !important; }
+    .diary-tiptap-content.diary-tiptap-content h1, .diary-tiptap-content.diary-tiptap-content h2 { color: ${textColor} !important; }
+    .diary-tiptap-content.diary-tiptap-content blockquote { color: ${mutedColor} !important; border-left-color: ${borderColor} !important; }
+    .diary-tiptap-content.diary-tiptap-content li { color: ${textColor} !important; }
+    .diary-tiptap-content.diary-tiptap-content a { color: ${accentColor} !important; }
+    .diary-tiptap-content.diary-tiptap-content p[data-caption] { color: ${captionColor} !important; }
+  `;
+};
+
 const EDITOR_CSS = `
   .diary-image-group {
     display: flex;
@@ -427,7 +450,7 @@ const EDITOR_CSS = `
   }
 `;
 const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
-  ({ initialContent = "", onFocus, onPickMedia, onInsertVideo, onContentChange }, ref) => {
+  ({ initialContent = "", onFocus, onPickMedia, onInsertVideo, onContentChange, themeId, onThemeChange }, ref) => {
     const [insertMenuVisible, setInsertMenuVisible] = useState(false);
     const [menuPosition, setMenuPosition] = useState({ top: 100, left: 50 });
     const [colorMenuVisible, setColorMenuVisible] = useState(false);
@@ -437,6 +460,8 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
     const [linkMenuVisible, setLinkMenuVisible] = useState(false);
     const [linkMenuPosition, setLinkMenuPosition] = useState({ top: 100, left: 50 });
     const [linkInput, setLinkInput] = useState("");
+    const [themeMenuVisible, setThemeMenuVisible] = useState(false);
+    const [themeMenuPosition, setThemeMenuPosition] = useState({ top: 100, left: 50 });
     const [, forceUpdate] = useState(0);
     const [toolbarPosition, setToolbarPosition] = useState<{ top: number; left: number } | null>(null);
 
@@ -446,6 +471,10 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
       extensions: [
         StarterKit.configure({
           heading: { levels: [1, 2] },
+          // ===== 標準の、link機能は、無効にする（下で、別途、詳しい設定の、Linkを、使うため） =====
+          link: false,
+          // ===== 標準のunderlineも、無効にする（下で、別途、Underlineを、使うため。重複登録を防ぐ） =====
+          underline: false,
         }),
         Underline,
         TextStyle,
@@ -502,6 +531,17 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
       styleTag.innerHTML = EDITOR_CSS;
       document.head.appendChild(styleTag);
     }, []);
+
+    // ===== 配色テーマが、変わるたびに、専用のCSSを、注入し直す =====
+    useEffect(() => {
+      let themeStyleTag = document.getElementById("diary-tiptap-theme-css") as HTMLStyleElement | null;
+      if (!themeStyleTag) {
+        themeStyleTag = document.createElement("style");
+        themeStyleTag.id = "diary-tiptap-theme-css";
+        document.head.appendChild(themeStyleTag);
+      }
+      themeStyleTag.innerHTML = buildThemeCss(themeId);
+    }, [themeId]);
     useImperativeHandle(ref, () => ({
       getHTML: async () => {
         return editor ? editor.getHTML() : "";
@@ -511,11 +551,11 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
       return null;
     }
     const applyHighlight = (color: string) => {
-      editor.chain().focus().toggleHighlight({ color }).run();
+      editor.chain().focus().extendMarkRange("highlight").setHighlight({ color }).run();
       setColorMenuVisible(false);
     };
     const applyTextColor = (color: string) => {
-      editor.chain().focus().setColor(color).run();
+      editor.chain().focus().extendMarkRange("textStyle").setColor(color).run();
       setTextColorMenuVisible(false);
     };
     const openLinkMenu = (event?: any) => {
@@ -613,6 +653,7 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
       { icon: "S", label: "打ち消し線", action: () => editor.chain().focus().toggleStrike().run() },
     ];
     const activeTextColor = editor.getAttributes("textStyle").color;
+    const activeHighlightColor = editor.getAttributes("highlight").color;
     const hasActiveLink = editor.isActive("link");
     return (
       <View style={styles.container}>
@@ -645,6 +686,9 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
                 }}
               >
                 <Text style={[styles.smallIconButtonTextColor, { color: activeTextColor || "#222" }]}>A</Text>
+                {!!activeTextColor && (
+                  <View style={[styles.colorIndicatorBar, { backgroundColor: activeTextColor }]} />
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.smallIconButton}
@@ -656,6 +700,9 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
                 }}
               >
                 <Text style={styles.smallIconButtonText}>🖍️</Text>
+                {!!activeHighlightColor && (
+                  <View style={[styles.colorIndicatorBar, { backgroundColor: activeHighlightColor }]} />
+                )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.smallIconButton} onPress={(event) => openLinkMenu(event)}>
                 <Text style={styles.smallIconButtonText}>🔗</Text>
@@ -713,13 +760,18 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
             >
               <Text style={styles.colorMenuTitle}>マーカー</Text>
               <View style={styles.colorSwatchRow}>
-                {HIGHLIGHT_COLORS.map((item) => (
-                  <TouchableOpacity
-                    key={item.color}
-                    style={[styles.colorSwatch, { backgroundColor: item.color }]}
-                    onPress={() => applyHighlight(item.color)}
-                  />
-                ))}
+                {HIGHLIGHT_COLORS.map((item) => {
+                  const isActive = activeHighlightColor === item.color;
+                  return (
+                    <TouchableOpacity
+                      key={item.color}
+                      style={[styles.colorSwatch, { backgroundColor: item.color }, isActive && styles.colorSwatchActive]}
+                      onPress={() => applyHighlight(item.color)}
+                    >
+                      {isActive && <Text style={styles.colorSwatchCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
               <TouchableOpacity
                 style={styles.colorMenuCancel}
@@ -750,13 +802,18 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
             >
               <Text style={styles.colorMenuTitle}>文字色</Text>
               <View style={styles.colorSwatchRow}>
-                {TEXT_COLORS.map((item) => (
-                  <TouchableOpacity
-                    key={item.color}
-                    style={[styles.colorSwatch, { backgroundColor: item.color }]}
-                    onPress={() => applyTextColor(item.color)}
-                  />
-                ))}
+                {TEXT_COLORS.map((item) => {
+                  const isActive = activeTextColor === item.color;
+                  return (
+                    <TouchableOpacity
+                      key={item.color}
+                      style={[styles.colorSwatch, { backgroundColor: item.color }, isActive && styles.colorSwatchActive]}
+                      onPress={() => applyTextColor(item.color)}
+                    >
+                      {isActive && <Text style={styles.colorSwatchCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
               <TouchableOpacity
                 style={styles.colorMenuCancel}
@@ -805,6 +862,50 @@ const TextBlockEditor = forwardRef<TextBlockEditorHandle, Props>(
             </TouchableOpacity>
           </TouchableOpacity>
         </Modal>
+        <Modal
+          visible={themeMenuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setThemeMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.insertMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setThemeMenuVisible(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[styles.smallPanel, { top: themeMenuPosition.top, left: themeMenuPosition.left }]}
+            >
+              <Text style={styles.colorMenuTitle}>配色</Text>
+              <View style={{ gap: 8 }}>
+                <TouchableOpacity
+                  style={styles.themeOptionRow}
+                  onPress={() => {
+                    onThemeChange?.("");
+                    setThemeMenuVisible(false);
+                  }}
+                >
+                  <View style={[styles.themeOptionDot, { backgroundColor: "#fff", borderColor: "#ddd" }]} />
+                  <Text style={styles.themeOptionLabel}>なし</Text>
+                </TouchableOpacity>
+                {COLOR_THEMES.map((t) => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={styles.themeOptionRow}
+                    onPress={() => {
+                      onThemeChange?.(t.id);
+                      setThemeMenuVisible(false);
+                    }}
+                  >
+                    <View style={[styles.themeOptionDot, { backgroundColor: t.accent }]} />
+                    <Text style={styles.themeOptionLabel}>{t.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
       </View>
     );
   }
@@ -844,8 +945,20 @@ const styles = StyleSheet.create({
   smallIconButton: {
     width: 30,
     height: 30,
+    borderRadius: 15,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+  },
+  colorIndicatorBar: {
+    position: "absolute",
+    bottom: 3,
+    width: 14,
+    height: 3,
+    borderRadius: 2,
   },
   smallIconButtonText: {
     fontSize: 16,
@@ -939,6 +1052,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "#ddd",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  colorSwatchActive: {
+    borderWidth: 3,
+    borderColor: "#222",
+    transform: [{ scale: 1.1 }],
+  },
+  colorSwatchCheck: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   colorMenuCancel: {
     width: "100%",
@@ -970,5 +1098,22 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 14,
+  },
+  themeOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  themeOptionDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  themeOptionLabel: {
+    fontSize: 14,
+    color: "#333",
   },
 });

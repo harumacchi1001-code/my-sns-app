@@ -24,7 +24,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import PostPreviewPanel from "../../components/PostPreviewPanel";
 import TextBlockEditor, { TextBlockEditorHandle } from "../../components/TextBlockEditor";
-import { ColorThemeId, getColorTheme, getLayout, TemplateField } from "../../constants/postTemplates";
+import { COLOR_THEMES, ColorThemeId, getColorTheme, getLayout, TemplateField } from "../../constants/postTemplates";
 import { auth, db, storage } from "../../firebaseConfig";
 
 // ===== 動画は、まだ文章の中に埋め込めないため、エディタの下に、別枠で持つ =====
@@ -80,6 +80,10 @@ export default function PostScreen() {
   // ===== 本文（見出し・画像なども含む、1つの、連続した文章）は、ここで管理する =====
   const mainEditorRef = useRef<TextBlockEditorHandle | null>(null);
   const [initialBodyContent, setInitialBodyContent] = useState("");
+  // ===== 自由入力モードでの、記事全体の、配色テーマ（ツールバーから、選ぶ） =====
+  const [freeWriteThemeId, setFreeWriteThemeId] = useState<string>("");
+  // ===== 自由入力モードで、選ばれている、配色の、実際のデータ =====
+  const freeWriteTheme = freeWriteThemeId ? getColorTheme(freeWriteThemeId as ColorThemeId) : null;
   // ===== プレビューパネルに、リアルタイムで反映するための、本文の中身 =====
   const [previewBodyHtml, setPreviewBodyHtml] = useState("");
   // ===== 下書き読み込み・リセットのたびに、エディタを、まっさらに作り直すための、キー =====
@@ -441,7 +445,8 @@ export default function PostScreen() {
       status,
       templateGenreId: genreId || null,
       templateLayoutId: layoutId || null,
-      templateThemeId: themeId || null,
+      // ===== テンプレートの、配色か、自由入力モードの、配色か、どちらか、実際に選ばれた方を、保存する =====
+      templateThemeId: (templateTheme ? themeId : freeWriteThemeId) || null,
     };
   };
   const handlePublish = async () => {
@@ -503,6 +508,7 @@ export default function PostScreen() {
         onPickMedia={handlePickMedia}
         onInsertVideo={handleInsertVideo}
         onContentChange={setPreviewBodyHtml}
+        themeId={templateTheme ? themeId : freeWriteThemeId}
       />
       {videoBlocks.map((vb) => (
         <View key={vb.id} style={styles.imageBlockWrapper}>
@@ -524,12 +530,28 @@ export default function PostScreen() {
         title={title}
         hashtags={hashtags}
         bodyHtml={previewBodyHtml}
+        theme={templateTheme || freeWriteTheme}
       />
       <View style={styles.pageWrapper}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleDeleteAll}>
             <Text style={styles.deleteLabel}>{t("post.deleteButton")}</Text>
           </TouchableOpacity>
+          {/* ===== 記事全体の、配色テーマを、選ぶ、丸いボタンの、列 ===== */}
+          <View style={styles.headerThemeRow}>
+            {COLOR_THEMES.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                onPress={() => setFreeWriteThemeId(freeWriteThemeId === t.id ? "" : t.id)}
+                style={[
+                  styles.headerThemeDot,
+                  // ===== 丸の中身は、そのテーマの、実際の背景色。枠は、そのテーマの、文字色 =====
+                  { backgroundColor: t.background, borderColor: t.text },
+                  freeWriteThemeId === t.id && styles.headerThemeDotSelected,
+                ]}
+              />
+            ))}
+          </View>
           <View style={styles.rightButtonsGroup}>
             <TouchableOpacity onPress={handleSaveDraft} disabled={uploading}>
               <Text style={styles.saveDraftText}>{t("post.saveDraftButton")}</Text>
@@ -635,7 +657,73 @@ export default function PostScreen() {
                 </Text>
                 {renderMainEditor()}
               </View>
+            ) : freeWriteTheme ? (
+              // ===== 自由入力モードで、配色が、選ばれているとき =====
+              <View
+                style={[
+                  styles.templateArea,
+                  { backgroundColor: freeWriteTheme.background, borderColor: freeWriteTheme.border },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.thumbnailArea,
+                    styles.templateThumbnailArea,
+                    { aspectRatio: thumbnail ? thumbnailAspectRatio : DEFAULT_THUMBNAIL_RATIO },
+                  ]}
+                  onPress={pickThumbnail}
+                >
+                  {thumbnail ? (
+                    thumbnailType === "video" ? (
+                      <VideoPreview uri={thumbnail} style={styles.thumbnailImage} />
+                    ) : (
+                      <Image source={{ uri: thumbnail }} style={styles.thumbnailImage} resizeMode="contain" />
+                    )
+                  ) : (
+                    <Text style={[styles.thumbnailPlaceholder, { color: freeWriteTheme.placeholder }]}>
+                      {t("post.thumbnailPlaceholder")}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                <TextInput
+                  placeholder={t("post.titlePlaceholder")}
+                  placeholderTextColor={freeWriteTheme.placeholder}
+                  value={title}
+                  onChangeText={setTitle}
+                  style={[styles.titleInput, { color: freeWriteTheme.text }]}
+                  multiline
+                />
+                <View style={styles.hashtagContainer}>
+                  <TouchableOpacity style={styles.hashtagButton} onPress={handleHashtagButtonPress}>
+                    <Text style={styles.hashtagButtonText}>#</Text>
+                  </TouchableOpacity>
+                  {hashtags.map((tag, index) => (
+                    <View key={index} style={styles.hashtagPill}>
+                      <Text style={styles.hashtagPillText}>#{tag}</Text>
+                      <TouchableOpacity
+                        style={styles.hashtagRemoveButton}
+                        onPress={() => removeHashtag(index)}
+                      >
+                        <Text style={styles.hashtagRemoveText}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {isTagging && (
+                    <TextInput
+                      value={currentTagInput}
+                      onChangeText={setCurrentTagInput}
+                      style={styles.hashtagTextInput}
+                      placeholder={t("post.hashtagPlaceholder")}
+                      autoFocus
+                      returnKeyType="done"
+                      onSubmitEditing={confirmAndCloseTagInput}
+                    />
+                  )}
+                </View>
+                {renderMainEditor()}
+              </View>
             ) : (
+              // ===== 自由入力モードで、配色が、選ばれていないとき（これまでどおり） =====
               <>
                 <TouchableOpacity
                   style={[
@@ -897,6 +985,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 14,
   },
+  // ===== ヘッダーの、配色選択の、丸ボタンの、列 =====
+  headerThemeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerThemeDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  headerThemeDotSelected: {
+    // ===== 選択中は、外側に、青いラインを、もう1本、足す（枠の、外側に、影のような形で、表現） =====
+    borderWidth: 1.5,
+    shadowColor: "#4a90e2",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 0,
+    outlineWidth: 2,
+    outlineColor: "#4a90e2",
+    outlineStyle: "solid",
+    outlineOffset: 2,
+  } as any,
   saveDraftText: {
     color: "#999",
     fontSize: 13,
@@ -1025,6 +1138,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     padding: 16,
+    paddingBottom: 400,
     overflow: "hidden",
   },
   templateThumbnailArea: {

@@ -6,6 +6,14 @@ type Props = {
   title: string;
   hashtags: string[];
   bodyHtml: string;
+  // ===== 選ばれている、配色テーマ（未選択なら、null） =====
+  theme?: {
+    background: string;
+    text: string;
+    muted: string;
+    placeholder: string;
+    border: string;
+  } | null;
 };
 
 // ===== この幅より、狭い画面は「スマホ」、広い画面は「パソコン」として、扱う =====
@@ -109,7 +117,7 @@ const PREVIEW_CSS = `
   }
 `;
 
-export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hashtags, bodyHtml }: Props) {
+export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hashtags, bodyHtml, theme }: Props) {
   // ===== プレビューが、開いているかどうか（スマホ幅では、最初は、閉じておく） =====
   const [isOpen, setIsOpen] = useState(false);
   // ===== 今、スマホ幅かどうか（画面のサイズが、変わるたびに、判定し直す） =====
@@ -171,8 +179,8 @@ export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hash
         width: isMobile ? 260 : 340,
         maxHeight: "calc(100vh - 110px)",
         overflowY: "auto",
-        background: "#fff",
-        border: "1px solid #eee",
+        background: theme ? theme.background : "#fff",
+        border: `1px solid ${theme ? theme.border : "#eee"}`,
         borderRadius: 12,
         boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
         zIndex: 5,
@@ -214,16 +222,30 @@ export default function PostPreviewPanel({ thumbnail, thumbnailType, title, hash
       )}
       <div style={{ padding: "10px 12px" }}>
         {title ? (
-          <p style={{ fontSize: 14, fontWeight: 700, color: "#222", margin: "0 0 8px", whiteSpace: "pre-wrap" }}>{title}</p>
+          <p
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: theme ? theme.text : "#222",
+              margin: "0 0 8px",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {title}
+          </p>
         ) : (
-          <p style={{ fontSize: 14, color: "#ccc", margin: "0 0 8px" }}>（タイトル未入力）</p>
+          <p style={{ fontSize: 14, color: theme ? theme.placeholder : "#ccc", margin: "0 0 8px" }}>（タイトル未入力）</p>
         )}
         {hashtags.length > 0 && (
           <p style={{ fontSize: 11, color: "#4a90e2", margin: "0 0 8px" }}>
             {hashtags.map((t) => `#${t}`).join(" ")}
           </p>
         )}
-        <div className="diary-preview-body" dangerouslySetInnerHTML={{ __html: bodyHtml || "" }} />
+        <div
+          className="diary-preview-body"
+          style={{ color: theme ? theme.text : undefined }}
+          dangerouslySetInnerHTML={{ __html: bodyHtml || "" }}
+        />
       </div>
     </div>
   );
