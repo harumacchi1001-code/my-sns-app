@@ -232,8 +232,9 @@ export default function ChatListScreen() {
                 onLongPress={() => openChatMenu(item)}
               >
                 {item.isGroup ? (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarPlaceholderText}>👥</Text>
+                  <View style={styles.groupStampWrapper}>
+                    <StampFrame size={50} imageUri={null} borderColor="#888" notchesPerSide={5} notchRadius={2.5} />
+                    <Text style={styles.groupStampEmoji}>👥</Text>
                   </View>
                 ) : (
                   <TouchableOpacity onPress={() => handleAvatarPress(info.userId)}>
@@ -424,6 +425,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   avatarPlaceholderText: {
+    fontSize: 22,
+  },
+  groupStampWrapper: {
+    width: 50,
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  groupStampEmoji: {
+    position: "absolute",
     fontSize: 22,
   },
   chatInfo: {
