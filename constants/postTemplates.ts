@@ -488,3 +488,26 @@ export const getLayout = (genreId: string, layoutId: "A" | "B" | "C") => {
 export const getColorTheme = (themeId: ColorThemeId) => {
   return COLOR_THEMES.find((t) => t.id === themeId) || COLOR_THEMES[0];
 };
+// ===== プレビュー画面で、それっぽく見せるための、サンプル入力データ（ジャンルID → レイアウトID → フィールドキー → 値） =====
+export const TEMPLATE_SAMPLE_DATA: Record<string, Record<string, Record<string, any>>> = {
+  recipe: {
+    A: {
+      ingredients: "豚バラ肉 200g、キャベツ 1/4玉、卵 2個、醤油 大さじ2",
+      steps: "1. 野菜を切る\n2. 豚肉を炒める\n3. 野菜を加えて炒める\n4. 卵でとじる",
+      time: "20分",
+    },
+    B: {
+      ingredients: ["豚バラ肉 200g", "キャベツ 1/4玉", "卵 2個"],
+      steps: ["野菜を切る", "炒める", "卵でとじる"],
+      tips: "強火で、一気に、炒めるのが、ポイント",
+    },
+    C: {
+      ingredients: "豚バラ肉、キャベツ、卵、醤油",
+      steps: "炒めて、卵でとじるだけの、簡単レシピ",
+    },
+  },
+};
+// ===== サンプルデータを、取り出す（見つからなければ、空を返す） =====
+export const getSampleData = (genreId: string, layoutId: "A" | "B" | "C") => {
+  return TEMPLATE_SAMPLE_DATA[genreId]?.[layoutId] || {};
+};

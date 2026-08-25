@@ -1,6 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
 import {
     Platform,
     ScrollView,
@@ -11,52 +10,58 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-    COLOR_THEMES,
-    ColorThemeId,
     getColorTheme,
     getGenreTemplate,
+    getSampleData,
     TemplateField,
 } from "../constants/postTemplates";
-
-export default function TemplateFormatSelectScreen() {
+export default function TemplatePreviewScreen() {
   const router = useRouter();
-  const { genreId } = useLocalSearchParams<{ genreId: string }>();
+  const { genreId, layoutId } = useLocalSearchParams<{ genreId: string; layoutId: "A" | "B" | "C" }>();
   const genre = getGenreTemplate(genreId || "");
-
-  const [selectedLayoutId, setSelectedLayoutId] = useState<"A" | "B" | "C">("A");
-  const [selectedThemeId, setSelectedThemeId] = useState<ColorThemeId>("simple");
-
-  if (!genre) {
+  const theme = getColorTheme("simple");
+  if (!genre || !layoutId) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.centerContainer}>
-          <Text>ジャンルが見つかりません</Text>
+          <Text>テンプレートが見つかりません</Text>
         </View>
       </SafeAreaView>
     );
   }
-
-  const selectedLayout = genre.layouts.find((l) => l.id === selectedLayoutId)!;
-  const theme = getColorTheme(selectedThemeId);
-
-  // ===== 選んだ、レイアウト＋配色で、実際に書き始める =====
+  const layout = genre.layouts.find((l) => l.id === layoutId);
+  if (!layout) {
+    return (
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <View style={styles.centerContainer}>
+          <Text>テンプレートが見つかりません</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  const sampleData = getSampleData(genreId, layoutId);
+  // ===== ×ボタン：テンプレート選択画面に、戻る =====
+  const handleClose = () => {
+    router.back();
+  };
+  // ===== 「この形式で、書き始める」：編集画面へ（配色は渡さず、編集画面の初期値のまま） =====
   const handleConfirm = () => {
     router.push({
       pathname: "/post-editor",
-      params: { genreId, layoutId: selectedLayoutId, themeId: selectedThemeId },
+      params: { genreId, layoutId },
     });
   };
-
-  // ===== 入力欄の種類ごとに、プレビュー表示を分ける =====
+  // ===== 入力欄の種類ごとに、サンプル値を、それっぽく、表示する =====
   const renderFieldPreview = (field: TemplateField) => {
+    const value = sampleData[field.key];
     switch (field.type) {
       case "text":
         return (
           <View key={field.key} style={styles.previewFieldBlock}>
             <Text style={[styles.previewLabel, { color: theme.muted }]}>{field.label}</Text>
             <View style={[styles.previewInputBox, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-              <Text style={{ color: theme.placeholder, fontSize: 13 }}>
-                {field.placeholder || field.label}
+              <Text style={{ color: theme.text, fontSize: 13 }}>
+                {value || field.placeholder || field.label}
               </Text>
             </View>
           </View>
@@ -72,8 +77,8 @@ export default function TemplateFormatSelectScreen() {
                 { borderColor: theme.border, backgroundColor: theme.surface },
               ]}
             >
-              <Text style={{ color: theme.placeholder, fontSize: 13 }}>
-                {field.placeholder || field.label}
+              <Text style={{ color: theme.text, fontSize: 13 }}>
+                {value || field.placeholder || field.label}
               </Text>
             </View>
           </View>
@@ -84,23 +89,37 @@ export default function TemplateFormatSelectScreen() {
             <Text style={[styles.previewLabel, { color: theme.muted }]}>{field.label}</Text>
             <View style={{ flexDirection: "row", gap: 3 }}>
               {[1, 2, 3, 4, 5].map((n) => (
-                <MaterialIcons key={n} name="star-border" size={18} color={theme.placeholder} />
+                <MaterialIcons
+                  key={n}
+                  name={value && n <= value ? "star" : "star-border"}
+                  size={18}
+                  color={value && n <= value ? theme.accent : theme.placeholder}
+                />
               ))}
             </View>
           </View>
         );
-      case "repeatableList":
+      case "repeatableList": {
+        const items: string[] = Array.isArray(value) ? value : [];
         return (
           <View key={field.key} style={styles.previewFieldBlock}>
             <Text style={[styles.previewLabel, { color: theme.muted }]}>{field.label}</Text>
-            <View style={[styles.previewInputBox, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-              <Text style={{ color: theme.placeholder, fontSize: 13 }}>
-                {field.placeholder || "項目を追加"}
-              </Text>
-            </View>
-            <Text style={{ color: theme.accent, fontSize: 12, marginTop: 4 }}>＋ 追加</Text>
+            {items.length > 0 ? (
+              items.map((item, index) => (
+                <Text key={index} style={{ color: theme.text, fontSize: 13, marginBottom: 2 }}>
+                  ・{item}
+                </Text>
+              ))
+            ) : (
+              <View style={[styles.previewInputBox, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                <Text style={{ color: theme.placeholder, fontSize: 13 }}>
+                  {field.placeholder || "項目を追加"}
+                </Text>
+              </View>
+            )}
           </View>
         );
+      }
       case "photo":
         return (
           <View key={field.key} style={styles.previewFieldBlock}>
@@ -143,84 +162,35 @@ export default function TemplateFormatSelectScreen() {
         return null;
     }
   };
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backText}>← 戻る</Text>
+          <Text style={styles.headerTitle}>
+            {genre.label}・{layout.name}
+          </Text>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+            <MaterialIcons name="close" size={22} color="#333" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{genre.label}</Text>
-          <View style={{ width: 40 }} />
         </View>
-
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* ===== レイアウトの選択 ===== */}
-          <Text style={styles.sectionTitle}>構成を選ぶ</Text>
-          <View style={styles.layoutRow}>
-            {genre.layouts.map((layout) => (
-              <TouchableOpacity
-                key={layout.id}
-                style={[
-                  styles.layoutButton,
-                  selectedLayoutId === layout.id && styles.layoutButtonActive,
-                ]}
-                onPress={() => setSelectedLayoutId(layout.id)}
-              >
-                <Text
-                  style={
-                    selectedLayoutId === layout.id
-                      ? styles.layoutButtonTextActive
-                      : styles.layoutButtonText
-                  }
-                >
-                  {layout.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ===== 配色テーマの選択 ===== */}
-          <Text style={styles.sectionTitle}>配色を選ぶ</Text>
-          <View style={styles.themeRow}>
-            {COLOR_THEMES.map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.themeSwatch,
-                  { backgroundColor: t.background, borderColor: t.border },
-                  selectedThemeId === t.id && styles.themeSwatchActive,
-                ]}
-                onPress={() => setSelectedThemeId(t.id)}
-              >
-                <View style={[styles.themeSwatchDot, { backgroundColor: t.accent }]} />
-                <Text style={[styles.themeSwatchText, { color: t.text }]}>{t.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ===== プレビュー ===== */}
-          <Text style={styles.sectionTitle}>プレビュー</Text>
           <View
             style={[
               styles.previewCard,
-              { backgroundColor: theme.background, borderColor: theme.border, overflow: "hidden", padding: 0 },
+              { backgroundColor: theme.background, borderColor: theme.border },
             ]}
           >
-            {/* ===== サムネイルの見た目（プレビューのみ） ===== */}
             <View style={[styles.previewThumbnail, { backgroundColor: theme.surface }]}>
               <MaterialIcons name="image" size={28} color={theme.placeholder} />
             </View>
             <View style={{ padding: 16 }}>
-              {/* ===== タイトルの見た目（プレビューのみ） ===== */}
-              <Text style={[styles.previewTitle, { color: theme.placeholder }]}>投稿のタイトル</Text>
-              <Text style={[styles.previewGenreTitle, { color: theme.text }]}>{genre.label}</Text>
-              {selectedLayout.fields.map((field) => renderFieldPreview(field))}
+              <Text style={[styles.previewGenreTitle, { color: theme.text }]}>
+                {genre.label}のタイトル例
+              </Text>
+              {layout.fields.map((field) => renderFieldPreview(field))}
             </View>
           </View>
         </ScrollView>
-
         <View style={styles.footer}>
           <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
             <Text style={styles.confirmButtonText}>この形式で書き始める</Text>
@@ -230,7 +200,6 @@ export default function TemplateFormatSelectScreen() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -261,78 +230,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: "#eee",
   },
-  backText: {
-    color: "#4a90e2",
-    fontSize: 15,
-  },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
+    color: "#222",
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
   },
   scrollContent: {
     padding: 16,
     paddingBottom: 30,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  layoutRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  layoutButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    alignItems: "center",
-  },
-  layoutButtonActive: {
-    backgroundColor: "#222",
-    borderColor: "#222",
-  },
-  layoutButtonText: {
-    fontSize: 13,
-    color: "#333",
-  },
-  layoutButtonTextActive: {
-    fontSize: 13,
-    color: "#fff",
-    fontWeight: "600",
-  },
-  themeRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  themeSwatch: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-    gap: 6,
-  },
-  themeSwatchActive: {
-    borderWidth: 2,
-    borderColor: "#4a90e2",
-  },
-  themeSwatchDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-  },
-  themeSwatchText: {
-    fontSize: 12,
-  },
   previewCard: {
     borderWidth: 1,
     borderRadius: 14,
-    padding: 16,
+    overflow: "hidden",
   },
   previewThumbnail: {
     width: "100%",
@@ -340,15 +258,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  previewTitle: {
+  previewGenreTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 12,
-  },
-  previewGenreTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 12,
+    marginBottom: 14,
   },
   previewFieldBlock: {
     marginBottom: 12,
