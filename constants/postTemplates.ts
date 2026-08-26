@@ -79,18 +79,25 @@ export const GENRE_TEMPLATES: GenreTemplate[] = [
         id: "A",
         name: "定番型",
         fields: [
+          { key: "headline", label: "見出し", type: "text", placeholder: "一言で、何があったか" },
+          { key: "category", label: "カテゴリ・分野", type: "text", placeholder: "例：政治、テクノロジー、スポーツ" },
+          { key: "whenWhere", label: "いつ・どこで", type: "text", placeholder: "例：8月24日、東京で" },
+          { key: "lead", label: "リード文（一言でまとめ）", type: "text", placeholder: "読まなくても、要点が伝わる一文" },
           { key: "summary", label: "出来事の要約", type: "textarea", placeholder: "何があったかを、簡潔に" },
+          { key: "opinion", label: "感じたこと・自分の見解", type: "textarea", placeholder: "どう思ったか" },
+          { key: "importance", label: "重要度（自分にとって）", type: "rating" },
           { key: "source", label: "情報源（URL）", type: "text", placeholder: "https://" },
-          { key: "opinion", label: "自分の見解", type: "textarea", placeholder: "どう思ったか" },
         ],
       },
       {
         id: "B",
         name: "リスト・要約型",
         fields: [
-          { key: "headline", label: "見出し（結論）", type: "text", placeholder: "一言で言うと" },
-          { key: "points", label: "ポイント（箇条書き）", type: "repeatableList", placeholder: "ポイントを追加" },
-          { key: "detail", label: "詳細", type: "textarea", placeholder: "詳しく説明する" },
+          { key: "theme", label: "今日、気になったテーマ", type: "text", placeholder: "例：週末のニュース" },
+          { key: "category", label: "カテゴリ", type: "text", placeholder: "例：政治、テクノロジー、スポーツ" },
+          { key: "points", label: "気になったニュース（箇条書き）", type: "repeatableList", placeholder: "ニュースを追加" },
+          { key: "comment", label: "それぞれへの一言コメント", type: "textarea", placeholder: "感想や、印象に残ったこと" },
+          { key: "sources", label: "情報源（URL）", type: "repeatableList", placeholder: "URLを追加" },
         ],
       },
       {
@@ -98,7 +105,9 @@ export const GENRE_TEMPLATES: GenreTemplate[] = [
         name: "写真メイン型",
         fields: [
           { key: "photo", label: "写真", type: "photo" },
-          { key: "summary", label: "出来事の要約（1〜2行）", type: "textarea", placeholder: "短くまとめる" },
+          { key: "headline", label: "見出し", type: "text", placeholder: "一言で、何があったか" },
+          { key: "category", label: "カテゴリ", type: "text", placeholder: "例：政治、テクノロジー、スポーツ" },
+          { key: "comment", label: "一言コメント", type: "textarea", placeholder: "短い感想" },
           { key: "source", label: "情報源", type: "text", placeholder: "https://" },
         ],
       },
@@ -490,6 +499,31 @@ export const getColorTheme = (themeId: ColorThemeId) => {
 };
 // ===== プレビュー画面で、それっぽく見せるための、サンプル入力データ（ジャンルID → レイアウトID → フィールドキー → 値） =====
 export const TEMPLATE_SAMPLE_DATA: Record<string, Record<string, Record<string, any>>> = {
+  news: {
+    A: {
+      headline: "〇〇市、新しい公共交通サービスを発表",
+      category: "地域・行政",
+      whenWhere: "8月24日、〇〇市で",
+      lead: "市内の、交通の便が、大きく、改善される見通し",
+      summary: "〇〇市が、来年から、新しい、バスの、路線を、増やすと、発表した。高齢者や、子育て世帯の、移動の、負担を、軽くすることが、狙い。",
+      opinion: "自分の、住む、地域にも、広がってほしい取り組みだと、感じた。",
+      importance: 4,
+      source: "https://example.com/news/12345",
+    },
+    B: {
+      theme: "週末に、気になった、ニュース",
+      category: "テクノロジー・社会",
+      points: ["新しい、AIサービスが、発表された", "電気代の、値上げが、決定", "地元の、お祭りが、3年ぶりに、開催"],
+      comment: "特に、電気代の、値上げは、生活に、直結するので、要チェック。",
+      sources: ["https://example.com/news/1", "https://example.com/news/2"],
+    },
+    C: {
+      headline: "〇〇の、新商品が、話題に",
+      category: "経済",
+      comment: "発売前から、SNSで、注目されていた、商品。実際に、見てみたい。",
+      source: "https://example.com/news/67890",
+    },
+  },
   recipe: {
     A: {
       ingredients: "豚バラ肉 200g、キャベツ 1/4玉、卵 2個、醤油 大さじ2",

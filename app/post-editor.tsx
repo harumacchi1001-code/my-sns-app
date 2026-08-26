@@ -26,7 +26,6 @@ import PostPreviewPanel from "../components/PostPreviewPanel";
 import TextBlockEditor, { TextBlockEditorHandle } from "../components/TextBlockEditor";
 import { COLOR_THEMES, ColorThemeId, getColorTheme, getLayout, TemplateField } from "../constants/postTemplates";
 import { auth, db, storage } from "../firebaseConfig";
-
 // ===== 動画は、まだ文章の中に埋め込めないため、エディタの下に、別枠で持つ =====
 type VideoBlock = { id: string; uri: string; aspectRatio: number };
 let blockIdCounter = 0;
@@ -67,6 +66,11 @@ export default function PostScreen() {
   const templateLayout = genreId ? getLayout(genreId, layoutId || "A") : null;
   const templateTheme = themeId ? getColorTheme(themeId) : null;
   const [templateValues, setTemplateValues] = useState<Record<string, any>>({});
+  // ===== テンプレートの項目のうち、ユーザーが「いらない」と削除した、項目のkey一覧 =====
+  const [removedFieldKeys, setRemovedFieldKeys] = useState<Set<string>>(new Set());
+  const removeTemplateField = (fieldKey: string) => {
+    setRemovedFieldKeys((prev) => new Set(prev).add(fieldKey));
+  };
   const [title, setTitle] = useState("");
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [thumbnailType, setThumbnailType] = useState<"image" | "video">("image");
@@ -76,7 +80,6 @@ export default function PostScreen() {
   const [currentTagInput, setCurrentTagInput] = useState("");
   const [isTagging, setIsTagging] = useState(false);
   const [loadedDraftId, setLoadedDraftId] = useState<string | null>(null);
-
   // ===== 本文（見出し・画像なども含む、1つの、連続した文章）は、ここで管理する =====
   const mainEditorRef = useRef<TextBlockEditorHandle | null>(null);
   const [initialBodyContent, setInitialBodyContent] = useState("");
@@ -84,13 +87,14 @@ export default function PostScreen() {
   const [freeWriteThemeId, setFreeWriteThemeId] = useState<string>("simple");
   // ===== 自由入力モードで、選ばれている、配色の、実際のデータ =====
   const freeWriteTheme = freeWriteThemeId ? getColorTheme(freeWriteThemeId as ColorThemeId) : null;
+  // ===== テンプレート使用時、配色が、まだ、指定されていなければ、自由入力モードの、配色（初期値）を、代わりに、使う =====
+  const effectiveTemplateTheme = templateTheme || freeWriteTheme;
   // ===== プレビューパネルに、リアルタイムで反映するための、本文の中身 =====
   const [previewBodyHtml, setPreviewBodyHtml] = useState("");
   // ===== 下書き読み込み・リセットのたびに、エディタを、まっさらに作り直すための、キー =====
   const [editorKey, setEditorKey] = useState(0);
   // ===== 動画だけは、まだ本文の中に埋め込めないため、別枠のリストとして持つ =====
   const [videoBlocks, setVideoBlocks] = useState<VideoBlock[]>([]);
-
   const lastLoadedDraftId = useRef<string | null>(null);
   const resetForm = () => {
     setTitle("");
@@ -106,6 +110,7 @@ export default function PostScreen() {
     setVideoBlocks([]);
     setEditorKey((k) => k + 1);
     setTemplateValues({});
+    setRemovedFieldKeys(new Set());
     setFreeWriteThemeId("simple");
     router.setParams({ draftId: undefined });
   };
@@ -129,7 +134,6 @@ export default function PostScreen() {
           setHashtags(data.hashtags || []);
           setLoadedDraftId(draftId);
           lastLoadedDraftId.current = draftId;
-
           // ===== 過去の投稿（文章・画像が、別々のブロックだった形式）も、開けるように変換する =====
           let mergedHtml = "";
           const loadedVideos: VideoBlock[] = [];
@@ -180,10 +184,9 @@ export default function PostScreen() {
       }
     }
   };
-
   // ===== 「＋」メニューから、画像を追加：選んで、アップロードして、URLを返す（本文の中に、そのまま埋め込まれる） =====
   // ===== Web版専用：画像・動画を、まとめて選び、それぞれの場所に、直接、埋め込むための、アップロード処理 =====
-  const handlePickMedia = async (): Promise <
+  const handlePickMedia = async (): Promise< 
     { type: "image" | "video"; url: string; ratio: number }[]
   > => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -217,7 +220,6 @@ export default function PostScreen() {
     }
     return items;
   };
-
   // ===== 「＋」メニューから、動画を追加：まだ本文には埋め込めないため、下に、別枠で追加する =====
   const handleInsertVideo = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -237,7 +239,6 @@ export default function PostScreen() {
   const removeVideoBlock = (id: string) => {
     setVideoBlocks((prev) => prev.filter((v) => v.id !== id));
   };
-
   const updateTemplateValue = (fieldKey: string, value: any) => {
     setTemplateValues((prev) => ({ ...prev, [fieldKey]: value }));
   };
@@ -327,7 +328,6 @@ export default function PostScreen() {
       ]
     );
   };
-
   // ===== 本文（1つのエディタ）＋動画一覧を、これまでと同じcontentBlocksの形にする =====
   const buildContentBlocks = async () => {
     const result: { type: "text" | "image" | "video"; html?: string; url?: string; aspectRatio?: number }[] = [];
@@ -347,7 +347,6 @@ export default function PostScreen() {
     }
     return result;
   };
-
   const buildTemplateContentBlocks = async () => {
     if (!templateLayout) return [];
     const result: { type: "text" | "image" | "video"; html?: string; url?: string; aspectRatio?: number }[] = [];
@@ -361,6 +360,7 @@ export default function PostScreen() {
       return await getDownloadURL(storageRef);
     };
     for (const field of templateLayout.fields) {
+      if (removedFieldKeys.has(field.key)) continue;
       const value = templateValues[field.key];
       if (field.type === "text" || field.type === "textarea") {
         if (value && String(value).trim()) {
@@ -396,7 +396,6 @@ export default function PostScreen() {
     }
     return result;
   };
-
   const hasAnyContent = async () => {
     if (title.trim() || thumbnail) return true;
     if (templateLayout) {
@@ -412,7 +411,6 @@ export default function PostScreen() {
     if (html && html.replace(/<p>\s*<\/p>/g, "").trim()) return true;
     return false;
   };
-
   const buildPostData = async (status: "draft" | "published") => {
     const contentBlocks = templateLayout
       ? [...(await buildTemplateContentBlocks()), ...(await buildContentBlocks())]
@@ -434,6 +432,8 @@ export default function PostScreen() {
       .filter((b) => b.type === "text")
       .map((b) => b.html)
       .join("");
+    // ===== テンプレート使用時に、配色が、まだ、選ばれていなければ、実際に、画面に表示していた配色（自由入力モードの初期値）を、そのまま保存する =====
+    const finalThemeId = templateLayout ? (themeId || freeWriteThemeId) : freeWriteThemeId;
     return {
       title: title.trim(),
       body: bodyText,
@@ -447,7 +447,7 @@ export default function PostScreen() {
       templateGenreId: genreId || null,
       templateLayoutId: layoutId || null,
       // ===== テンプレートの、配色か、自由入力モードの、配色か、どちらか、実際に選ばれた方を、保存する =====
-      templateThemeId: (templateTheme ? themeId : freeWriteThemeId) || null,
+      templateThemeId: finalThemeId || null,
     };
   };
   const handlePublish = async () => {
@@ -498,7 +498,6 @@ export default function PostScreen() {
       alert(t("post.draftSaveFailed") + error.message);
     }
   };
-
   // ===== 本文（1つのエディタ）＋動画一覧を、まとめて表示する部分（テンプレート・自由入力、両方で共通） =====
   const renderMainEditor = () => (
     <>
@@ -509,7 +508,7 @@ export default function PostScreen() {
         onPickMedia={handlePickMedia}
         onInsertVideo={handleInsertVideo}
         onContentChange={setPreviewBodyHtml}
-        themeId={templateTheme ? themeId : freeWriteThemeId}
+        themeId={templateLayout ? (themeId || freeWriteThemeId) : freeWriteThemeId}
       />
       {videoBlocks.map((vb) => (
         <View key={vb.id} style={styles.imageBlockWrapper}>
@@ -521,7 +520,6 @@ export default function PostScreen() {
       ))}
     </>
   );
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* ===== Web版・広い画面のときだけ、右側に表示される、プレビューパネル ===== */}
@@ -531,7 +529,7 @@ export default function PostScreen() {
         title={title}
         hashtags={hashtags}
         bodyHtml={previewBodyHtml}
-        theme={templateTheme || freeWriteTheme}
+        theme={effectiveTemplateTheme}
       />
       <View style={styles.pageWrapper}>
         <View style={styles.header}>
@@ -575,11 +573,11 @@ export default function PostScreen() {
             keyboardDismissMode="on-drag"
             style={{ flex: 1 }}
           >
-            {templateLayout && templateTheme ? (
+            {templateLayout && effectiveTemplateTheme ? (
               <View
                 style={[
                   styles.templateArea,
-                  { backgroundColor: templateTheme.background, borderColor: templateTheme.border },
+                  { backgroundColor: effectiveTemplateTheme.background, borderColor: effectiveTemplateTheme.border },
                 ]}
               >
                 <TouchableOpacity
@@ -597,17 +595,17 @@ export default function PostScreen() {
                       <Image source={{ uri: thumbnail }} style={styles.thumbnailImage} resizeMode="contain" />
                     )
                   ) : (
-                    <Text style={[styles.thumbnailPlaceholder, { color: templateTheme.placeholder }]}>
+                    <Text style={[styles.thumbnailPlaceholder, { color: effectiveTemplateTheme.placeholder }]}>
                       {t("post.thumbnailPlaceholder")}
                     </Text>
                   )}
                 </TouchableOpacity>
                 <TextInput
                   placeholder={t("post.titlePlaceholder")}
-                  placeholderTextColor={templateTheme.placeholder}
+                  placeholderTextColor={effectiveTemplateTheme.placeholder}
                   value={title}
                   onChangeText={setTitle}
-                  style={[styles.titleInput, { color: templateTheme.text }]}
+                  style={[styles.titleInput, { color: effectiveTemplateTheme.text }]}
                   multiline
                 />
                 <View style={styles.hashtagContainer}>
@@ -638,22 +636,25 @@ export default function PostScreen() {
                   )}
                 </View>
                 <View style={styles.templateDivider} />
-                {templateLayout.fields.map((field) => (
-                  <TemplateFieldInput
-                    key={field.key}
-                    field={field}
-                    value={templateValues[field.key]}
-                    theme={templateTheme}
-                    onChangeText={(text) => updateTemplateValue(field.key, text)}
-                    onSetRating={(n) => updateTemplateValue(field.key, n)}
-                    onAddListItem={(text) => addTemplateListItem(field.key, text)}
-                    onRemoveListItem={(index) => removeTemplateListItem(field.key, index)}
-                    onPickPhoto={() => pickTemplatePhoto(field.key)}
-                    onPickPhotoPair={(which) => pickTemplatePhotoPair(field.key, which)}
-                  />
-                ))}
+                {templateLayout.fields
+                  .filter((field) => !removedFieldKeys.has(field.key))
+                  .map((field) => (
+                    <TemplateFieldInput
+                      key={field.key}
+                      field={field}
+                      value={templateValues[field.key]}
+                      theme={effectiveTemplateTheme}
+                      onChangeText={(text) => updateTemplateValue(field.key, text)}
+                      onSetRating={(n) => updateTemplateValue(field.key, n)}
+                      onAddListItem={(text) => addTemplateListItem(field.key, text)}
+                      onRemoveListItem={(index) => removeTemplateListItem(field.key, index)}
+                      onPickPhoto={() => pickTemplatePhoto(field.key)}
+                      onPickPhotoPair={(which) => pickTemplatePhotoPair(field.key, which)}
+                      onRemoveField={() => removeTemplateField(field.key)}
+                    />
+                  ))}
                 <View style={styles.templateDivider} />
-                <Text style={[styles.additionalSectionLabel, { color: templateTheme.muted }]}>
+                <Text style={[styles.additionalSectionLabel, { color: effectiveTemplateTheme.muted }]}>
                   写真・動画や、自由な文章を追加
                 </Text>
                 {renderMainEditor()}
@@ -787,7 +788,6 @@ export default function PostScreen() {
     </SafeAreaView>
   );
 }
-
 function TemplateFieldInput({
   field,
   value,
@@ -798,6 +798,7 @@ function TemplateFieldInput({
   onRemoveListItem,
   onPickPhoto,
   onPickPhotoPair,
+  onRemoveField,
 }: {
   field: TemplateField;
   value: any;
@@ -808,12 +809,22 @@ function TemplateFieldInput({
   onRemoveListItem: (index: number) => void;
   onPickPhoto: () => void;
   onPickPhotoPair: (which: "before" | "after") => void;
+  onRemoveField: () => void;
 }) {
   const [listInput, setListInput] = useState("");
+  // ===== ラベルと、削除（×）ボタンを、横並びで、表示する、共通の部品 =====
+  const renderLabelRow = () => (
+    <View style={styles.templateLabelRow}>
+      <Text style={[styles.templateLabel, { color: theme.muted, marginBottom: 0 }]}>{field.label}</Text>
+      <TouchableOpacity onPress={onRemoveField} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+        <MaterialIcons name="close" size={16} color={theme.muted} />
+      </TouchableOpacity>
+    </View>
+  );
   if (field.type === "text") {
     return (
       <View style={styles.templateFieldBlock}>
-        <Text style={[styles.templateLabel, { color: theme.muted }]}>{field.label}</Text>
+        {renderLabelRow()}
         <TextInput
           value={value || ""}
           onChangeText={onChangeText}
@@ -827,7 +838,7 @@ function TemplateFieldInput({
   if (field.type === "textarea") {
     return (
       <View style={styles.templateFieldBlock}>
-        <Text style={[styles.templateLabel, { color: theme.muted }]}>{field.label}</Text>
+        {renderLabelRow()}
         <TextInput
           value={value || ""}
           onChangeText={onChangeText}
@@ -847,7 +858,7 @@ function TemplateFieldInput({
     const current = value || 0;
     return (
       <View style={styles.templateFieldBlock}>
-        <Text style={[styles.templateLabel, { color: theme.muted }]}>{field.label}</Text>
+        {renderLabelRow()}
         <View style={{ flexDirection: "row", gap: 4 }}>
           {[1, 2, 3, 4, 5].map((n) => (
             <TouchableOpacity key={n} onPress={() => onSetRating(n)}>
@@ -866,7 +877,7 @@ function TemplateFieldInput({
     const items: string[] = value || [];
     return (
       <View style={styles.templateFieldBlock}>
-        <Text style={[styles.templateLabel, { color: theme.muted }]}>{field.label}</Text>
+        {renderLabelRow()}
         {items.map((item, index) => (
           <View key={index} style={styles.templateListRow}>
             <Text style={{ color: theme.text, fontSize: 13, flex: 1 }}>・{item}</Text>
@@ -905,7 +916,7 @@ function TemplateFieldInput({
   if (field.type === "photo") {
     return (
       <View style={styles.templateFieldBlock}>
-        <Text style={[styles.templateLabel, { color: theme.muted }]}>{field.label}</Text>
+        {renderLabelRow()}
         <TouchableOpacity
           style={[styles.templatePhotoBox, { borderColor: theme.border, backgroundColor: theme.surface }]}
           onPress={onPickPhoto}
@@ -923,7 +934,7 @@ function TemplateFieldInput({
     const pair = value || {};
     return (
       <View style={styles.templateFieldBlock}>
-        <Text style={[styles.templateLabel, { color: theme.muted }]}>{field.label}</Text>
+        {renderLabelRow()}
         <View style={{ flexDirection: "row", gap: 8 }}>
           <TouchableOpacity
             style={[styles.templatePhotoBox, { flex: 1, borderColor: theme.border, backgroundColor: theme.surface }]}
@@ -1163,6 +1174,12 @@ const styles = StyleSheet.create({
   },
   templateLabel: {
     fontSize: 12,
+    marginBottom: 6,
+  },
+  templateLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 6,
   },
   templateInput: {
