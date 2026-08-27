@@ -327,6 +327,9 @@ const TEXT_COLORS = [
   { label: "グレー", color: "#757575" },
   { label: "ネイビー", color: "#34495e" },
   { label: "ワインレッド", color: "#8e3b46" },
+  { label: "ダークグレー", color: "#3d3d3d" },
+  { label: "ローズ", color: "#5c3a4a" },
+  { label: "スカイブルー", color: "#5ac8fa" },
 ];
 // ===== 選ばれた配色テーマに応じて、見出し・引用・リスト・キャプション・リンクの色を、組み立てる =====
 const buildThemeCss = (themeId?: string | null) => {
