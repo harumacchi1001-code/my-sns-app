@@ -9,6 +9,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import WebSidebar from "../components/WebSidebar";
 import {
     getColorTheme,
     getGenreTemplate,
@@ -164,7 +165,8 @@ export default function TemplatePreviewScreen() {
   };
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.pageWrapper}>
+      {Platform.OS === "web" && <WebSidebar />}
+      <View style={[styles.pageWrapper, Platform.OS === "web" && { paddingLeft: 64 }]}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
             {genre.label}・{layout.name}

@@ -24,6 +24,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import PostPreviewPanel from "../components/PostPreviewPanel";
 import TextBlockEditor, { TextBlockEditorHandle } from "../components/TextBlockEditor";
+import WebSidebar from "../components/WebSidebar";
 import { COLOR_THEMES, ColorThemeId, getColorTheme, getLayout, TemplateField } from "../constants/postTemplates";
 import { auth, db, storage } from "../firebaseConfig";
 // ===== 動画は、まだ文章の中に埋め込めないため、エディタの下に、別枠で持つ =====
@@ -522,6 +523,7 @@ export default function PostScreen() {
   );
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {isWeb && <WebSidebar />}
       {/* ===== Web版・広い画面のときだけ、右側に表示される、プレビューパネル ===== */}
       <PostPreviewPanel
         thumbnail={thumbnail || null}
@@ -531,7 +533,7 @@ export default function PostScreen() {
         bodyHtml={previewBodyHtml}
         theme={effectiveTemplateTheme}
       />
-      <View style={styles.pageWrapper}>
+      <View style={[styles.pageWrapper, isWeb && { paddingLeft: 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleDeleteAll}>
             <Text style={styles.deleteLabel}>{t("post.deleteButton")}</Text>

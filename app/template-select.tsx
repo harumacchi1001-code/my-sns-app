@@ -9,12 +9,13 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GENRE_TEMPLATES, getSampleData, TemplateField, TemplateLayout } from "../constants/postTemplates";
+import WebSidebar from "../components/WebSidebar";
+import { GENRE_TEMPLATES, getSampleData, TemplateLayout } from "../constants/postTemplates";
 // ===== 実際のレイアウトの、フィールド構成を、縮小した見た目で、それぞれ、それらしく、表示する =====
 function MiniLayoutPreview({ genreId, layout }: { genreId: string; layout: TemplateLayout }) {
   const sampleData = getSampleData(genreId, layout.id);
   const isPhotoMain = layout.fields[0]?.type === "photo" || layout.fields[0]?.type === "photoPair";
-  const renderField = (field: TemplateField) => {
+  const renderField = (field: any) => {
     const value = sampleData[field.key];
     switch (field.type) {
       case "text":
@@ -103,7 +104,8 @@ export default function TemplateSelectScreen() {
   };
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.pageWrapper}>
+      {Platform.OS === "web" && <WebSidebar />}
+      <View style={[styles.pageWrapper, Platform.OS === "web" && { paddingLeft: 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>
@@ -234,7 +236,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 6,
   },
-  // ===== ミニプレビューの、カード（横幅・縦幅、すべて統一） =====
   miniPreviewCard: {
     width: "100%",
     height: 144,
@@ -254,6 +255,7 @@ const styles = StyleSheet.create({
     height: 48,
   },
   miniPreviewBody: {
+    flex: 1,
     padding: 6,
   },
   miniTitleText: {
