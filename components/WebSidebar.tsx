@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { Animated, Image, Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { auth, db } from "../firebaseConfig";
 const SIDEBAR_COLLAPSED_WIDTH = 64;
 const SIDEBAR_EXPANDED_WIDTH = 200;
@@ -195,7 +195,11 @@ export default function WebSidebar() {
       <Animated.View style={[styles.sidebarColumn, { width: widthAnim }]}>
         <View style={styles.topNavGroup}>
           <View style={styles.logoWrapper}>
-            <MaterialIcons name="auto-stories" size={24} color="#222" />
+            <Image
+              source={require("../assets/images/logo.png")}
+              style={{ width: 28, height: 28 }}
+              resizeMode="contain"
+            />
           </View>
           {NAV_ITEMS.map((item) => renderNavItem(item))}
         </View>

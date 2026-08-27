@@ -3,6 +3,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+    Image,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
@@ -43,6 +44,11 @@ export default function LoginScreen() {
       {/* ===== ここからWeb版専用（PC向けに中央寄せ・固定幅にするラッパー） ===== */}
       <View style={styles.formWrapper}>
         {/* ===== ここまでWeb版専用 ===== */}
+        <Image
+          source={require("../assets/images/logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.title}>{t("login.title")}</Text>
 
         <TextInput
@@ -114,6 +120,12 @@ const styles = StyleSheet.create({
     default: {},
   }),
   // ===== ここまでWeb版専用 =====
+  logo: {
+    width: 64,
+    height: 64,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
   title: {
     fontSize: 24,
     fontWeight: "bold",
