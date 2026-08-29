@@ -22,14 +22,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import CardsIcon from "../../components/CardsIcon";
 import StampFrame from "../../components/StampFrame";
 import { auth, db } from "../../firebaseConfig";
-
 type UserItem = {
   id: string;
   username?: string;
   handle?: string;
   photoUrl?: string;
 };
-
 type PostItem = {
   id: string;
   title?: string;
@@ -38,23 +36,26 @@ type PostItem = {
   hashtags?: string[];
   authorEmail?: string;
 };
-
+type GroupItem = {
+  id: string;
+  name?: string;
+  description?: string;
+  iconUrl?: string | null;
+  isPublic?: boolean;
+  memberCount?: number;
+};
 // ===== ハッシュタグの候補（タグ名＋件数） =====
 type HashtagCandidate = {
   tag: string;
   count: number;
 };
-
-// ===== アカウント／投稿／タグの、3つのタブ =====
-const TABS = ["user", "post", "hashtag"] as const;
+// ===== アカウント／投稿／タグ／グループの、4つのタブ =====
+const TABS = ["user", "post", "hashtag", "group"] as const;
 type TabMode = (typeof TABS)[number];
-
 const DAY_MS = 24 * 60 * 60 * 1000;
-
 // ===== ここからWeb版専用 =====
 const isWeb = Platform.OS === "web";
 // ===== ここまでWeb版専用 =====
-
 // ===== 投稿のハッシュタグから、検索ワードを含む候補を、件数付きで集計する =====
 const getHashtagCandidates = (allPosts: PostItem[], text: string): HashtagCandidate[] => {
   const keyword = text.trim().toLowerCase();
@@ -71,7 +72,6 @@ const getHashtagCandidates = (allPosts: PostItem[], text: string): HashtagCandid
     .map((tag) => ({ tag, count: counts[tag] }))
     .sort((a, b) => b.count - a.count);
 };
-
 export default function SearchScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -80,26 +80,22 @@ export default function SearchScreen() {
   const [searchText, setSearchText] = useState("");
   const [users, setUsers] = useState<UserItem[]>([]);
   const [posts, setPosts] = useState<PostItem[]>([]);
+  const [groups, setGroups] = useState<GroupItem[]>([]);
   const [loading, setLoading] = useState(true);
-
   // ===== 発見（ユーザー／投稿を選ぶ）中央カードメニューの、表示状態 =====
   const [discoverMenuVisible, setDiscoverMenuVisible] = useState(false);
-
-  // ===== 横スワイプで、3タブを切り替えるための状態 =====
+  // ===== 横スワイプで、4タブを切り替えるための状態 =====
   const scrollRef = useRef<ScrollView>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   // ===== スワイプ中の位置を、なめらかに追いかける、下線用のアニメーション値 =====
   const scrollX = useRef(new Animated.Value(0)).current;
-
   // ===== ストーリー関連の状態 =====
   const [stories, setStories] = useState<DocumentData[]>([]);
-
   useEffect(() => {
     if (initialTag) {
       setSearchText(initialTag);
     }
   }, [initialTag]);
-
   // ===== initialTagがある場合は、containerWidthが確定した後に、タグタブへスワイプ移動する =====
   useEffect(() => {
     if (initialTag && containerWidth > 0) {
@@ -108,7 +104,6 @@ export default function SearchScreen() {
       scrollX.setValue(containerWidth * 2);
     }
   }, [initialTag, containerWidth]);
-
   useEffect(() => {
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const data = snapshot.docs
@@ -116,7 +111,6 @@ export default function SearchScreen() {
         .filter((u) => u.id !== auth.currentUser?.uid) as UserItem[];
       setUsers(data);
     });
-
     const q = query(collection(db, "posts"), where("status", "==", "published"));
     const unsubscribePosts = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
@@ -126,7 +120,6 @@ export default function SearchScreen() {
       setPosts(data);
       setLoading(false);
     });
-
     // ===== ストーリー一覧を取得 =====
     const unsubscribeStories = onSnapshot(collection(db, "stories"), (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
@@ -135,14 +128,20 @@ export default function SearchScreen() {
       }));
       setStories(data);
     });
-
+    // ===== 公開グループの一覧を取得 =====
+    const gq = query(collection(db, "groups"), where("isPublic", "==", true));
+    const unsubscribeGroups = onSnapshot(gq, (snapshot) => {
+      const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as GroupItem[];
+      data.sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
+      setGroups(data);
+    });
     return () => {
       unsubscribeUsers();
       unsubscribePosts();
       unsubscribeStories();
+      unsubscribeGroups();
     };
   }, []);
-
   // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
   const getUserStories = (userId: string) => {
     const now = Date.now();
@@ -152,9 +151,7 @@ export default function SearchScreen() {
       return now - createdMs < DAY_MS;
     });
   };
-
   const myUid = auth.currentUser?.uid;
-
   // ===== 検索結果の、ユーザーアイコンをタップしたときの動作 =====
   const handleUserAvatarPress = (userId: string) => {
     const userStories = getUserStories(userId);
@@ -164,7 +161,6 @@ export default function SearchScreen() {
       router.push({ pathname: "/user/[id]", params: { id: userId } });
     }
   };
-
   const filteredUsers = searchText.trim()
     ? users.filter((u) => {
         const text = searchText.toLowerCase();
@@ -173,7 +169,6 @@ export default function SearchScreen() {
         return username.includes(text) || handle.includes(text);
       })
     : [];
-
   // ===== 「投稿」タブ：タイトル・ハッシュタグの、両方を検索対象にする =====
   const filteredPosts = posts.filter((p) => {
     const text = searchText.toLowerCase();
@@ -181,21 +176,26 @@ export default function SearchScreen() {
     const hashtagMatch = (p.hashtags || []).some((tag) => tag.toLowerCase().includes(text));
     return titleMatch || hashtagMatch;
   });
-
   // ===== 「タグ」タブ：ハッシュタグ名の候補（件数付き） =====
   const hashtagCandidates = getHashtagCandidates(posts, searchText);
-
+  // ===== 「グループ」タブ：グループ名・説明文で、絞り込む =====
+  const filteredGroups = searchText.trim()
+    ? groups.filter((g) => {
+        const text = searchText.toLowerCase();
+        const name = (g.name || "").toLowerCase();
+        const description = (g.description || "").toLowerCase();
+        return name.includes(text) || description.includes(text);
+      })
+    : groups;
   // ===== ハッシュタグ候補をタップしたら、新しい検索画面を、重ねて開く =====
   const handleSelectHashtagCandidate = (tag: string) => {
     router.push(`/hashtag-search/${encodeURIComponent(tag)}` as any);
   };
-
   // ===== タブをタップしたときに、該当ページへスワイプ移動する =====
   const handleTabPress = (index: number) => {
     setMode(TABS[index]);
     scrollRef.current?.scrollTo({ x: containerWidth * index, animated: true });
   };
-
   // ===== 手でスワイプし終えたときに、選択中のタブを更新する（見出しの太字表示などに使う） =====
   const handleMomentumScrollEnd = (e: any) => {
     if (containerWidth === 0) return;
@@ -207,19 +207,18 @@ export default function SearchScreen() {
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
     { useNativeDriver: false }
   );
-
   const getTabLabel = (key: TabMode) => {
     if (key === "user") return t("search.modeUser");
     if (key === "post") return t("search.modePost");
-    return t("search.modeHashtag");
+    if (key === "hashtag") return t("search.modeHashtag");
+    return "グループ";
   };
-
   const getPlaceholder = () => {
     if (mode === "user") return t("search.placeholderUser");
     if (mode === "post") return t("search.placeholderPost");
-    return t("search.placeholderHashtag");
+    if (mode === "hashtag") return t("search.placeholderHashtag");
+    return "グループを検索";
   };
-
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -227,12 +226,10 @@ export default function SearchScreen() {
       </View>
     );
   }
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
         <Text style={styles.header}>{t("search.title")}</Text>
-
         {/* ===== 検索バー（常時表示）＋発見アイコン ===== */}
         <View style={styles.searchBarRow}>
           <View style={styles.searchInputWrapper}>
@@ -252,8 +249,7 @@ export default function SearchScreen() {
             <CardsIcon size={20} color="#333" />
           </TouchableOpacity>
         </View>
-
-        {/* ===== アカウント／投稿／タグ：下線タブ ===== */}
+        {/* ===== アカウント／投稿／タグ／グループ：下線タブ ===== */}
         <View style={styles.tabsRow}>
           {TABS.map((key, index) => (
             <TouchableOpacity
@@ -287,8 +283,7 @@ export default function SearchScreen() {
             />
           )}
         </View>
-
-        {/* ===== 横スワイプで切り替わる、3つの結果ページ ===== */}
+        {/* ===== 横スワイプで切り替わる、4つの結果ページ ===== */}
         <View
           style={styles.swipeContainer}
           onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
@@ -321,7 +316,6 @@ export default function SearchScreen() {
                     const hasUnread = userStories.some(
                       (s) => !(s.viewedBy || []).includes(myUid)
                     );
-
                     return (
                       <View style={styles.userRow}>
                         <TouchableOpacity onPress={() => handleUserAvatarPress(item.id)}>
@@ -349,7 +343,6 @@ export default function SearchScreen() {
                   }}
                 />
               </View>
-
               {/* ===== 投稿：横並びリスト（16:9サムネイル＋タイトル全文＋ハッシュタグ全部） ===== */}
               <View style={[styles.tabPage, { width: containerWidth }]}>
                 <FlatList
@@ -396,7 +389,6 @@ export default function SearchScreen() {
                   )}
                 />
               </View>
-
               {/* ===== タグ：ハッシュタグ候補の一覧（投稿ではない） ===== */}
               <View style={[styles.tabPage, { width: containerWidth }]}>
                 <FlatList
@@ -427,11 +419,60 @@ export default function SearchScreen() {
                   )}
                 />
               </View>
+              {/* ===== グループ：公開グループの一覧（検索文字があれば絞り込み） ===== */}
+              <View style={[styles.tabPage, { width: containerWidth }]}>
+                <FlatList
+                  data={filteredGroups}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={styles.listContent}
+                  ListEmptyComponent={
+                    <View style={styles.centerContainer}>
+                      <Text style={styles.emptyText}>
+                        {searchText ? "見つかりませんでした" : "まだ、公開グループが、ありません"}
+                      </Text>
+                    </View>
+                  }
+                  ListHeaderComponent={
+                    <TouchableOpacity
+                      style={styles.createGroupRow}
+                      onPress={() => router.push("/group/create")}
+                    >
+                      <View style={styles.createGroupIconWrapper}>
+                        <MaterialIcons name="add" size={20} color="#4a90e2" />
+                      </View>
+                      <Text style={styles.createGroupText}>新しい、グループを作成</Text>
+                    </TouchableOpacity>
+                  }
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.groupRow}
+                      onPress={() => router.push({ pathname: "/group/[id]", params: { id: item.id } })}
+                    >
+                      <View style={styles.groupIconWrapperSmall}>
+                        {item.iconUrl ? (
+                          <Image source={{ uri: item.iconUrl }} style={styles.groupIconSmall} />
+                        ) : (
+                          <MaterialIcons name="groups" size={22} color="#bbb" />
+                        )}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.groupRowName} numberOfLines={1}>
+                          {item.name || "無題のグループ"}
+                        </Text>
+                        <Text style={styles.groupRowMeta} numberOfLines={1}>
+                          メンバー {item.memberCount || 0}人
+                          {item.description ? ` ・ ${item.description}` : ""}
+                        </Text>
+                      </View>
+                      <MaterialIcons name="chevron-right" size={20} color="#ccc" />
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
             </Animated.ScrollView>
           )}
         </View>
       </View>
-
       {/* ===== 発見（ユーザー／投稿を選ぶ）中央カードメニュー ===== */}
       <Modal
         visible={discoverMenuVisible}
@@ -478,7 +519,6 @@ export default function SearchScreen() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -685,6 +725,62 @@ const styles = StyleSheet.create({
     color: "#222",
   },
   hashtagCandidateCount: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 2,
+  },
+  // ===== グループ：一覧のスタイル =====
+  createGroupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#f0f0f0",
+    marginBottom: 4,
+  },
+  createGroupIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#eaf2fc",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  createGroupText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4a90e2",
+  },
+  groupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#f0f0f0",
+  },
+  groupIconWrapperSmall: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#f7f7f7",
+    borderWidth: 1,
+    borderColor: "#eee",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  groupIconSmall: {
+    width: "100%",
+    height: "100%",
+  },
+  groupRowName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#222",
+  },
+  groupRowMeta: {
     fontSize: 12,
     color: "#999",
     marginTop: 2,

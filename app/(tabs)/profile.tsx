@@ -42,7 +42,9 @@ export default function ProfileScreen() {
   const [privatePosts, setPrivatePosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"published" | "draft" | "private">("published");
+  const [activeTab, setActiveTab] = useState<"published" | "draft" | "private" | "group">("published");
+   // ===== 自分が、参加している、グループの一覧 =====
+  const [myGroups, setMyGroups] = useState<(DocumentData & { id: string })[]>([]);
   const [menuPost, setMenuPost] = useState<Post | null>(null);
   // ===== ここからWeb版専用 =====
   const [webMenuVisible, setWebMenuVisible] = useState(false);
@@ -127,6 +129,26 @@ export default function ProfileScreen() {
         unsubscribePrivate();
         unsubscribeStories();
       };
+    });
+    return () => unsubscribeAuth();
+  }, []);
+  // ===== 自分が、参加している、グループの一覧を、取得する =====
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      const unsubscribeUser = onSnapshot(doc(db, "users", user.uid), async (docSnap) => {
+        const joinedGroupIds: string[] = docSnap.exists() ? docSnap.data().joinedGroupIds || [] : [];
+        if (joinedGroupIds.length === 0) {
+          setMyGroups([]);
+          return;
+        }
+        const groupDocs = await Promise.all(joinedGroupIds.map((gid) => getDoc(doc(db, "groups", gid))));
+        const groups = groupDocs
+          .filter((d) => d.exists())
+          .map((d) => ({ id: d.id, ...d.data() }));
+        setMyGroups(groups);
+      });
+      return () => unsubscribeUser();
     });
     return () => unsubscribeAuth();
   }, []);
@@ -290,11 +312,12 @@ export default function ProfileScreen() {
             <MaterialIcons name="menu" size={26} color="#222" />
           </TouchableOpacity>
         </View>
-        <FlatList
-          data={displayedPosts}
+                <FlatList
+          key={activeTab === "group" ? "group-list" : "post-grid"}
+          data={activeTab === "group" ? myGroups : displayedPosts}
           keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
+          numColumns={activeTab === "group" ? 1 : 2}
+          columnWrapperStyle={activeTab === "group" ? undefined : styles.row}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
@@ -410,6 +433,14 @@ export default function ProfileScreen() {
                     非公開
                   </Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tabButton, activeTab === "group" && styles.tabButtonActive]}
+                  onPress={() => setActiveTab("group")}
+                >
+                  <Text style={activeTab === "group" ? styles.tabTextActive : styles.tabText}>
+                    グループ
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
           }
@@ -420,50 +451,81 @@ export default function ProfileScreen() {
                   ? "まだ投稿がありません"
                   : activeTab === "draft"
                   ? "下書きはありません"
-                  : "非公開の投稿はありません"}
+                  : activeTab === "private"
+                  ? "非公開の投稿はありません"
+                  : "参加しているグループはありません"}
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <TouchableOpacity
-                style={styles.menuButton}
-                onPress={(event) => handlePostMenuButtonPress(item, event)}
-              >
-                <MaterialIcons name="more-horiz" size={18} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() =>
-                  activeTab === "published"
-                    ? router.push({ pathname: "/post/[id]", params: { id: item.id } })
-                    : router.push({ pathname: "/(tabs)/post", params: { draftId: item.id } })
-                }
-              >
-                <View style={styles.thumbnailWrapper}>
-                  {item.thumbnailUrl ? (
-                    <PostThumbnail
-                      url={item.thumbnailUrl}
-                      mediaType={item.thumbnailType}
-                      style={[
-                        styles.thumbnail,
-                        { aspectRatio: item.thumbnailAspectRatio || DEFAULT_THUMBNAIL_RATIO },
-                      ]}
-                    />
-                  ) : (
-                    <View style={styles.thumbnailPlaceholder} />
+          renderItem={({ item }) => {
+            if (activeTab === "group") {
+              const isOwner = item.ownerEmail === auth.currentUser?.email;
+              return (
+                <TouchableOpacity
+                  style={styles.groupCard}
+                  onPress={() => router.push({ pathname: "/group/[id]", params: { id: item.id } })}
+                >
+                  <View style={styles.groupCardIconWrapper}>
+                    <MaterialIcons name="groups" size={22} color="#bbb" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.groupCardName} numberOfLines={1}>
+                      {item.name || "無題のグループ"}
+                    </Text>
+                    <Text style={styles.groupCardMeta}>メンバー {item.memberCount || 0}人</Text>
+                  </View>
+                  {isOwner && (
+                    <TouchableOpacity
+                      style={styles.groupCardManageButton}
+                      onPress={() => router.push({ pathname: "/group/[id]/manage", params: { id: item.id } })}
+                    >
+                      <Text style={styles.groupCardManageButtonText}>管理</Text>
+                    </TouchableOpacity>
                   )}
-                </View>
-                <View style={styles.cardBody}>
-                  <Text style={styles.title} numberOfLines={1}>
-                    {item.title || "（無題）"}
-                  </Text>
-                  {activeTab === "published" && (
-                    <Text style={styles.metaText}>♥ {item.likedBy?.length || 0}</Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            </View>
-          )}
+                </TouchableOpacity>
+              );
+            }
+            return (
+              <View style={styles.card}>
+                <TouchableOpacity
+                  style={styles.menuButton}
+                  onPress={(event) => handlePostMenuButtonPress(item, event)}
+                >
+                  <MaterialIcons name="more-horiz" size={18} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() =>
+                    activeTab === "published"
+                      ? router.push({ pathname: "/post/[id]", params: { id: item.id } })
+                      : router.push({ pathname: "/(tabs)/post", params: { draftId: item.id } })
+                  }
+                >
+                  <View style={styles.thumbnailWrapper}>
+                    {item.thumbnailUrl ? (
+                      <PostThumbnail
+                        url={item.thumbnailUrl}
+                        mediaType={item.thumbnailType}
+                        style={[
+                          styles.thumbnail,
+                          { aspectRatio: item.thumbnailAspectRatio || DEFAULT_THUMBNAIL_RATIO },
+                        ]}
+                      />
+                    ) : (
+                      <View style={styles.thumbnailPlaceholder} />
+                    )}
+                  </View>
+                  <View style={styles.cardBody}>
+                    <Text style={styles.title} numberOfLines={1}>
+                      {item.title || "（無題）"}
+                    </Text>
+                    {activeTab === "published" && (
+                      <Text style={styles.metaText}>♥ {item.likedBy?.length || 0}</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            );
+          }}
         />
       </View>
       <Modal
@@ -764,6 +826,48 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#fff",
     position: "relative",
+  },
+  groupCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    width: "100%",
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#eee",
+    borderRadius: 12,
+    backgroundColor: "#fafafa",
+    marginBottom: 10,
+  },
+  groupCardIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  groupCardName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#222",
+  },
+  groupCardMeta: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 2,
+  },
+  groupCardManageButton: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  groupCardManageButtonText: {
+    fontSize: 12,
+    color: "#333",
+    fontWeight: "600",
   },
   menuButton: {
     position: "absolute",

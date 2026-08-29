@@ -103,15 +103,22 @@ export default function NotificationsScreen() {
     if (notification.type === "follow") {
       return `${name}${t("notifications.followMessage")}`;
     }
-    if (notification.type === "follow_request") {
+        if (notification.type === "follow_request") {
       return `${name}${t("notifications.followRequestMessage")}`;
+    }
+    if (notification.type === "groupApproved") {
+      return `「${notification.groupName}」への参加が承認されました`;
+    }
+    if (notification.type === "groupNewPost") {
+      return `${name}が「${notification.groupName}」に投稿しました`;
     }
     return "";
   };
-  const getIconName = (type: string) => {
+    const getIconName = (type: string) => {
     if (type === "like") return "favorite";
     if (type === "comment") return "chat-bubble-outline";
     if (type === "follow_request") return "person-add";
+    if (type === "groupApproved" || type === "groupNewPost") return "groups";
     return "person";
   };
   const getIconColor = (type: string) => {
@@ -137,6 +144,14 @@ export default function NotificationsScreen() {
         const userId = snapshot.docs[0].id;
         router.push({ pathname: "/user/[id]", params: { id: userId } });
       }
+      return;
+    }
+        if (notification.type === "groupNewPost" && notification.postId) {
+      router.push({ pathname: "/post/[id]", params: { id: notification.postId } });
+      return;
+    }
+    if (notification.type === "groupApproved" && notification.groupId) {
+      router.push({ pathname: "/group/[id]", params: { id: notification.groupId } });
       return;
     }
     if (notification.postId) {

@@ -3,9 +3,9 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { addDoc, collection, doc, DocumentData, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, DocumentData, getDoc, getDocs, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -86,6 +87,10 @@ export default function PostScreen() {
   const [initialBodyContent, setInitialBodyContent] = useState("");
   // ===== 自由入力モードでの、記事全体の、配色テーマ（ツールバーから、選ぶ。必ず、いずれかのテーマが、選ばれた状態にする） =====
   const [freeWriteThemeId, setFreeWriteThemeId] = useState<string>("simple");
+  // ===== 自分が、参加している、グループの一覧（投稿先として、選べるように） =====
+  const [myGroups, setMyGroups] = useState<{ id: string; name: string }[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [groupMenuVisible, setGroupMenuVisible] = useState(false);
   // ===== 自由入力モードで、選ばれている、配色の、実際のデータ =====
   const freeWriteTheme = freeWriteThemeId ? getColorTheme(freeWriteThemeId as ColorThemeId) : null;
   // ===== テンプレート使用時、配色が、まだ、指定されていなければ、自由入力モードの、配色（初期値）を、代わりに、使う =====
@@ -97,6 +102,24 @@ export default function PostScreen() {
   // ===== 動画だけは、まだ本文の中に埋め込めないため、別枠のリストとして持つ =====
   const [videoBlocks, setVideoBlocks] = useState<VideoBlock[]>([]);
   const lastLoadedDraftId = useRef<string | null>(null);
+  // ===== 自分が、参加している、グループの一覧を、取得する =====
+  useEffect(() => {
+    const myUid = auth.currentUser?.uid;
+    if (!myUid) return;
+    const unsubscribe = onSnapshot(doc(db, "users", myUid), async (docSnap) => {
+      const joinedGroupIds: string[] = docSnap.exists() ? docSnap.data().joinedGroupIds || [] : [];
+      if (joinedGroupIds.length === 0) {
+        setMyGroups([]);
+        return;
+      }
+      const groupDocs = await Promise.all(joinedGroupIds.map((gid) => getDoc(doc(db, "groups", gid))));
+      const groups = groupDocs
+        .filter((d) => d.exists())
+        .map((d) => ({ id: d.id, name: d.data()?.name || "無題のグループ" }));
+      setMyGroups(groups);
+    });
+    return unsubscribe;
+  }, []);
   const resetForm = () => {
     setTitle("");
     setThumbnail(null);
@@ -113,6 +136,7 @@ export default function PostScreen() {
     setTemplateValues({});
     setRemovedFieldKeys(new Set());
     setFreeWriteThemeId("simple");
+    setSelectedGroupId(null);
     router.setParams({ draftId: undefined });
   };
   useFocusEffect(
@@ -187,9 +211,7 @@ export default function PostScreen() {
   };
   // ===== 「＋」メニューから、画像を追加：選んで、アップロードして、URLを返す（本文の中に、そのまま埋め込まれる） =====
   // ===== Web版専用：画像・動画を、まとめて選び、それぞれの場所に、直接、埋め込むための、アップロード処理 =====
-  const handlePickMedia = async (): Promise< 
-    { type: "image" | "video"; url: string; ratio: number }[]
-  > => {
+  const handlePickMedia = async (): Promise<{ type: "image" | "video"; url: string; ratio: number }[]> => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
       alert("写真・動画ライブラリへのアクセスが許可されていません");
@@ -449,9 +471,11 @@ export default function PostScreen() {
       templateLayoutId: layoutId || null,
       // ===== テンプレートの、配色か、自由入力モードの、配色か、どちらか、実際に選ばれた方を、保存する =====
       templateThemeId: finalThemeId || null,
+      // ===== 選ばれていれば、その、グループにも、投稿する =====
+      groupId: selectedGroupId || null,
     };
   };
-  const handlePublish = async () => {
+    const handlePublish = async () => {
     if (!(await hasAnyContent())) {
       alert(t("post.requiredFields"));
       return;
@@ -459,13 +483,38 @@ export default function PostScreen() {
     setUploading(true);
     try {
       const postData = await buildPostData("published");
+      let newPostId = loadedDraftId;
       if (loadedDraftId) {
         await updateDoc(doc(db, "posts", loadedDraftId), postData);
       } else {
-        await addDoc(collection(db, "posts"), {
+        const newPostRef = await addDoc(collection(db, "posts"), {
           ...postData,
           createdAt: serverTimestamp(),
         });
+        newPostId = newPostRef.id;
+      }
+      // ===== グループに、投稿した場合、他のメンバーに、通知する =====
+      if (selectedGroupId && newPostId) {
+        const groupSnap = await getDoc(doc(db, "groups", selectedGroupId));
+        const groupName = groupSnap.exists() ? groupSnap.data().name : "グループ";
+        const membersSnap = await getDocs(collection(db, "groups", selectedGroupId, "members"));
+        const myEmail = auth.currentUser?.email;
+        const notifyPromises = membersSnap.docs
+          .map((m) => m.data().email)
+          .filter((email) => email && email !== myEmail)
+          .map((email) =>
+            addDoc(collection(db, "notifications"), {
+              toUserEmail: email,
+              fromUserEmail: myEmail,
+              type: "groupNewPost",
+              groupId: selectedGroupId,
+              groupName,
+              postId: newPostId,
+              read: false,
+              createdAt: serverTimestamp(),
+            })
+          );
+        await Promise.all(notifyPromises);
       }
       resetForm();
       setUploading(false);
@@ -553,6 +602,17 @@ export default function PostScreen() {
               />
             ))}
           </View>
+          {/* ===== グループへの、投稿を、選べる、ボタン（参加している、グループが、あるときだけ、表示） ===== */}
+          {myGroups.length > 0 && (
+            <TouchableOpacity style={styles.groupSelectButton} onPress={() => setGroupMenuVisible(true)}>
+              <MaterialIcons name="groups" size={16} color={selectedGroupId ? "#4a90e2" : "#999"} />
+              <Text style={[styles.groupSelectButtonText, selectedGroupId && { color: "#4a90e2" }]} numberOfLines={1}>
+                {selectedGroupId
+                  ? myGroups.find((g) => g.id === selectedGroupId)?.name || "グループ"
+                  : "グループに投稿"}
+              </Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.rightButtonsGroup}>
             <TouchableOpacity onPress={handleSaveDraft} disabled={uploading}>
               <Text style={styles.saveDraftText}>{t("post.saveDraftButton")}</Text>
@@ -566,6 +626,39 @@ export default function PostScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        {/* ===== グループ選択、モーダル ===== */}
+        <Modal visible={groupMenuVisible} transparent animationType="fade" onRequestClose={() => setGroupMenuVisible(false)}>
+          <TouchableOpacity style={styles.groupMenuOverlay} activeOpacity={1} onPress={() => setGroupMenuVisible(false)}>
+            <TouchableOpacity activeOpacity={1} style={styles.groupMenuCard}>
+              <Text style={styles.groupMenuTitle}>投稿先の、グループ</Text>
+              <TouchableOpacity
+                style={styles.groupMenuItem}
+                onPress={() => {
+                  setSelectedGroupId(null);
+                  setGroupMenuVisible(false);
+                }}
+              >
+                <Text style={!selectedGroupId ? styles.groupMenuItemTextActive : styles.groupMenuItemText}>
+                  グループに、投稿しない
+                </Text>
+              </TouchableOpacity>
+              {myGroups.map((g) => (
+                <TouchableOpacity
+                  key={g.id}
+                  style={styles.groupMenuItem}
+                  onPress={() => {
+                    setSelectedGroupId(g.id);
+                    setGroupMenuVisible(false);
+                  }}
+                >
+                  <Text style={selectedGroupId === g.id ? styles.groupMenuItemTextActive : styles.groupMenuItemText}>
+                    {g.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -988,6 +1081,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 0.5,
     borderBottomColor: "#eee",
+    gap: 8,
   },
   deleteLabel: {
     color: "#e74c3c",
@@ -1010,6 +1104,55 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 1.5,
+  },
+  groupSelectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    maxWidth: 120,
+  },
+  groupSelectButtonText: {
+    fontSize: 12,
+    color: "#999",
+  },
+  groupMenuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  groupMenuCard: {
+    width: "80%",
+    maxWidth: 320,
+    maxHeight: "60%",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+  },
+  groupMenuTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 10,
+  },
+  groupMenuItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#eee",
+  },
+  groupMenuItemText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  groupMenuItemTextActive: {
+    fontSize: 14,
+    color: "#4a90e2",
+    fontWeight: "600",
   },
   headerThemeDotSelected: {
     // ===== 選択中は、外側に、青いラインを、もう1本、足す（枠の、外側に、影のような形で、表現） =====

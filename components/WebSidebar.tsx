@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { name: "explore", title: "検索", icon: "search" as const, route: "/explore" },
   { name: "post", title: "作成", icon: "add-box" as const, route: "/post" },
   { name: "chat", title: "チャット", icon: "send" as const, route: "/chat" },
+  { name: "groups-list", title: "グループ", icon: "groups" as const, route: "/groups-list" },
   { name: "notifications", title: "お知らせ", icon: "favorite" as const, route: "/notifications" },
   { name: "profile", title: "プロフィール", icon: "person" as const, route: "/profile" },
 ];
