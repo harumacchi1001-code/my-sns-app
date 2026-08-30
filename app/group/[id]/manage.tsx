@@ -2,8 +2,6 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
     addDoc,
-    arrayRemove,
-    arrayUnion,
     collection,
     deleteDoc,
     doc,
@@ -68,7 +66,7 @@ export default function GroupManageScreen() {
   // ===== 自分が、オーナー・管理者かどうかを、確認する =====
   const myMembership = members.find((m) => m.id === myUid);
   const isOwnerOrAdmin = myMembership?.role === "owner" || myMembership?.role === "admin";
-    const handleApprove = async (request: RequestItem) => {
+  const handleApprove = async (request: RequestItem) => {
     if (!id) return;
     await setDoc(doc(db, "groups", id, "members", request.id), {
       email: request.email,
@@ -77,17 +75,20 @@ export default function GroupManageScreen() {
     });
     await deleteDoc(doc(db, "groups", id, "joinRequests", request.id));
     await updateDoc(doc(db, "groups", id), { memberCount: increment(1) });
-    await updateDoc(doc(db, "users", request.id), { joinedGroupIds: arrayUnion(id) });
     // ===== 申請者に、承認されたことを、通知する =====
-    await addDoc(collection(db, "notifications"), {
-      toUserEmail: request.email,
-      fromUserEmail: auth.currentUser?.email,
-      type: "groupApproved",
-      groupId: id,
-      groupName: group?.name || "グループ",
-      read: false,
-      createdAt: serverTimestamp(),
-    });
+    try {
+      await addDoc(collection(db, "notifications"), {
+        toUserEmail: request.email,
+        fromUserEmail: auth.currentUser?.email,
+        type: "groupApproved",
+        groupId: id,
+        groupName: group?.name || "グループ",
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      console.log("通知の作成に、失敗しました。", error.message);
+    }
   };
   const handleReject = async (request: RequestItem) => {
     if (!id) return;
@@ -105,7 +106,6 @@ export default function GroupManageScreen() {
     }
     await deleteDoc(doc(db, "groups", id, "members", member.id));
     await updateDoc(doc(db, "groups", id), { memberCount: increment(-1) });
-    await updateDoc(doc(db, "users", member.id), { joinedGroupIds: arrayRemove(id) });
   };
   const handleToggleAdmin = async (member: MemberItem) => {
     if (!id) return;

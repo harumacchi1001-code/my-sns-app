@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { addDoc, arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useState } from "react";
 import {
@@ -79,7 +79,6 @@ export default function GroupCreateScreen() {
         role: "owner",
         joinedAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, "users", myUid), { joinedGroupIds: arrayUnion(groupRef.id) });
       setSaving(false);
       router.replace({ pathname: "/group/[id]", params: { id: groupRef.id } });
     } catch (error: any) {

@@ -241,10 +241,14 @@ export default function ChatDetailScreen() {
   };
   // ===== 三点メニュー・長押しメニューを開く（返信・削除） =====
   const openMessageMenu = (item: Message, isMine: boolean, event?: any) => {
+    console.log("DEBUG openMessageMenu:", "isMine=", isMine, "sharedPostId=", item.sharedPostId, "text=", item.text);
     if (isWeb && event) {
       const pageX = event?.nativeEvent?.pageX ?? 100;
       const pageY = event?.nativeEvent?.pageY ?? 100;
-      setMessageMenuPosition({ top: pageY - 10, left: pageX - 90 });
+      const menuWidth = 180;
+      const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1000;
+      const left = Math.min(Math.max(pageX - 90, 8), windowWidth - menuWidth - 8);
+      setMessageMenuPosition({ top: pageY - 10, left });
     }
     setMessageMenuTarget({ item, isMine });
   };
@@ -470,11 +474,9 @@ export default function ChatDetailScreen() {
                     >
                       <Text style={styles.hoverActionIcon}>🙂</Text>
                     </TouchableOpacity>
-                    {!item.sharedPostId && (
-                      <TouchableOpacity style={styles.hoverActionButton} onPress={() => startReplyTo(item)}>
-                        <Text style={styles.hoverActionIcon}>↩</Text>
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity style={styles.hoverActionButton} onPress={() => startReplyTo(item)}>
+                      <Text style={styles.hoverActionIcon}>↩</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.hoverActionButton}
                       onPress={(event) => openMessageMenu(item, isMine, event)}
@@ -752,7 +754,7 @@ export default function ChatDetailScreen() {
                     : styles.chatActionSheet
                 }
               >
-                {messageMenuTarget && !messageMenuTarget.item.sharedPostId && (
+                {messageMenuTarget && (
                   <TouchableOpacity style={isWeb ? styles.chatActionItemWeb : styles.chatActionItem} onPress={startReplyFromMenu}>
                     <Text style={styles.chatActionText}>返信</Text>
                   </TouchableOpacity>
@@ -1168,6 +1170,7 @@ const styles = StyleSheet.create({
   },
   chatActionOverlayWeb: {
     flex: 1,
+    position: "relative",
     backgroundColor: "rgba(0,0,0,0.2)",
   },
   chatActionPopup: {
@@ -1183,9 +1186,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 6,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
   },
   chatActionItemWeb: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+    minHeight: 40,
+    justifyContent: "center",
   },
 });

@@ -3,7 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { addDoc, collection, doc, DocumentData, getDoc, getDocs, onSnapshot, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, DocumentData, getDoc, getDocs, serverTimestamp, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -102,23 +102,24 @@ export default function PostScreen() {
   // ===== 動画だけは、まだ本文の中に埋め込めないため、別枠のリストとして持つ =====
   const [videoBlocks, setVideoBlocks] = useState<VideoBlock[]>([]);
   const lastLoadedDraftId = useRef<string | null>(null);
-  // ===== 自分が、参加している、グループの一覧を、取得する =====
+  // ===== 自分が、参加している、グループの一覧を、取得する（collectionGroupで、自分のuidを持つmembersを検索） =====
   useEffect(() => {
     const myUid = auth.currentUser?.uid;
     if (!myUid) return;
-    const unsubscribe = onSnapshot(doc(db, "users", myUid), async (docSnap) => {
-      const joinedGroupIds: string[] = docSnap.exists() ? docSnap.data().joinedGroupIds || [] : [];
-      if (joinedGroupIds.length === 0) {
-        setMyGroups([]);
-        return;
-      }
-      const groupDocs = await Promise.all(joinedGroupIds.map((gid) => getDoc(doc(db, "groups", gid))));
-      const groups = groupDocs
-        .filter((d) => d.exists())
-        .map((d) => ({ id: d.id, name: d.data()?.name || "無題のグループ" }));
+    const loadMyGroups = async () => {
+      const allGroupsSnap = await getDocs(collection(db, "groups"));
+      const groups: { id: string; name: string }[] = [];
+      await Promise.all(
+        allGroupsSnap.docs.map(async (groupDoc) => {
+          const memberSnap = await getDoc(doc(db, "groups", groupDoc.id, "members", myUid));
+          if (memberSnap.exists()) {
+            groups.push({ id: groupDoc.id, name: groupDoc.data()?.name || "無題のグループ" });
+          }
+        })
+      );
       setMyGroups(groups);
-    });
-    return unsubscribe;
+    };
+    loadMyGroups();
   }, []);
   const resetForm = () => {
     setTitle("");
@@ -471,8 +472,6 @@ export default function PostScreen() {
       templateLayoutId: layoutId || null,
       // ===== テンプレートの、配色か、自由入力モードの、配色か、どちらか、実際に選ばれた方を、保存する =====
       templateThemeId: finalThemeId || null,
-      // ===== 選ばれていれば、その、グループにも、投稿する =====
-      groupId: selectedGroupId || null,
     };
   };
     const handlePublish = async () => {
@@ -493,28 +492,14 @@ export default function PostScreen() {
         });
         newPostId = newPostRef.id;
       }
-      // ===== グループに、投稿した場合、他のメンバーに、通知する =====
+      // ===== グループを、選んでいれば、そのグループのチャットに、投稿を、共有カードとして送る =====
       if (selectedGroupId && newPostId) {
-        const groupSnap = await getDoc(doc(db, "groups", selectedGroupId));
-        const groupName = groupSnap.exists() ? groupSnap.data().name : "グループ";
-        const membersSnap = await getDocs(collection(db, "groups", selectedGroupId, "members"));
         const myEmail = auth.currentUser?.email;
-        const notifyPromises = membersSnap.docs
-          .map((m) => m.data().email)
-          .filter((email) => email && email !== myEmail)
-          .map((email) =>
-            addDoc(collection(db, "notifications"), {
-              toUserEmail: email,
-              fromUserEmail: myEmail,
-              type: "groupNewPost",
-              groupId: selectedGroupId,
-              groupName,
-              postId: newPostId,
-              read: false,
-              createdAt: serverTimestamp(),
-            })
-          );
-        await Promise.all(notifyPromises);
+        await addDoc(collection(db, "groups", selectedGroupId, "messages"), {
+          senderEmail: myEmail,
+          sharedPostId: newPostId,
+          createdAt: serverTimestamp(),
+        });
       }
       resetForm();
       setUploading(false);

@@ -45,6 +45,8 @@ export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState<"published" | "draft" | "private" | "group">("published");
    // ===== 自分が、参加している、グループの一覧 =====
   const [myGroups, setMyGroups] = useState<(DocumentData & { id: string })[]>([]);
+  // ===== 各グループの、未読メッセージ数（グループID → 件数） =====
+  const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
   const [menuPost, setMenuPost] = useState<Post | null>(null);
   // ===== ここからWeb版専用 =====
   const [webMenuVisible, setWebMenuVisible] = useState(false);
@@ -132,23 +134,38 @@ export default function ProfileScreen() {
     });
     return () => unsubscribeAuth();
   }, []);
-  // ===== 自分が、参加している、グループの一覧を、取得する =====
+  // ===== 自分が、参加している、グループの一覧を、取得する（全グループを走査して、自分がmembersに、いるか確認） =====
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (!user) return;
-      const unsubscribeUser = onSnapshot(doc(db, "users", user.uid), async (docSnap) => {
-        const joinedGroupIds: string[] = docSnap.exists() ? docSnap.data().joinedGroupIds || [] : [];
-        if (joinedGroupIds.length === 0) {
-          setMyGroups([]);
-          return;
-        }
-        const groupDocs = await Promise.all(joinedGroupIds.map((gid) => getDoc(doc(db, "groups", gid))));
-        const groups = groupDocs
-          .filter((d) => d.exists())
-          .map((d) => ({ id: d.id, ...d.data() }));
+      const loadMyGroups = async () => {
+        const allGroupsSnap = await getDocs(collection(db, "groups"));
+        const groups: (DocumentData & { id: string })[] = [];
+        await Promise.all(
+          allGroupsSnap.docs.map(async (groupDoc) => {
+            const memberSnap = await getDoc(doc(db, "groups", groupDoc.id, "members", user.uid));
+            if (memberSnap.exists()) {
+              groups.push({ id: groupDoc.id, ...groupDoc.data() });
+            }
+          })
+        );
         setMyGroups(groups);
-      });
-      return () => unsubscribeUser();
+        // ===== 参加している、それぞれの、グループの、未読メッセージ数を、数える =====
+        const myEmail = user.email;
+        const counts: Record<string, number> = {};
+        await Promise.all(
+          groups.map(async (g) => {
+            const messagesSnap = await getDocs(collection(db, "groups", g.id, "messages"));
+            const unread = messagesSnap.docs.filter((m) => {
+              const readBy: string[] = m.data().readBy || [];
+              return !readBy.includes(myEmail || "");
+            }).length;
+            counts[g.id] = unread;
+          })
+        );
+        setGroupUnreadCounts(counts);
+      };
+      loadMyGroups();
     });
     return () => unsubscribeAuth();
   }, []);
@@ -460,6 +477,7 @@ export default function ProfileScreen() {
           renderItem={({ item }) => {
             if (activeTab === "group") {
               const isOwner = item.ownerEmail === auth.currentUser?.email;
+              const unreadCount = groupUnreadCounts[item.id] || 0;
               return (
                 <TouchableOpacity
                   style={styles.groupCard}
@@ -472,7 +490,9 @@ export default function ProfileScreen() {
                     <Text style={styles.groupCardName} numberOfLines={1}>
                       {item.name || "無題のグループ"}
                     </Text>
-                    <Text style={styles.groupCardMeta}>メンバー {item.memberCount || 0}人</Text>
+                    <Text style={unreadCount > 0 ? styles.groupCardMetaUnread : styles.groupCardMeta}>
+                      {unreadCount > 0 ? `未読メッセージ ${unreadCount}件` : "未読メッセージ なし"}
+                    </Text>
                   </View>
                   {isOwner && (
                     <TouchableOpacity
@@ -505,10 +525,7 @@ export default function ProfileScreen() {
                       <PostThumbnail
                         url={item.thumbnailUrl}
                         mediaType={item.thumbnailType}
-                        style={[
-                          styles.thumbnail,
-                          { aspectRatio: item.thumbnailAspectRatio || DEFAULT_THUMBNAIL_RATIO },
-                        ]}
+                        style={[styles.thumbnail, { aspectRatio: DEFAULT_THUMBNAIL_RATIO }]}
                       />
                     ) : (
                       <View style={styles.thumbnailPlaceholder} />
@@ -855,6 +872,12 @@ const styles = StyleSheet.create({
   groupCardMeta: {
     fontSize: 12,
     color: "#999",
+    marginTop: 2,
+  },
+  groupCardMetaUnread: {
+    fontSize: 12,
+    color: "#4a90e2",
+    fontWeight: "600",
     marginTop: 2,
   },
   groupCardManageButton: {
