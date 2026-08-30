@@ -3,34 +3,35 @@ import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    DocumentData,
-    onSnapshot,
-    orderBy,
-    query,
-    serverTimestamp,
-    setDoc,
-    updateDoc,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  DocumentData,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MediaLightbox from "../../../components/MediaLightbox";
@@ -46,10 +47,10 @@ function MessageVideo({ uri, style }: { uri: string; style: any }) {
   });
   return <VideoView style={style} player={player} contentFit="cover" nativeControls allowsFullscreen={false} />;
 }
-export default function GroupChatScreen() {
+export default function NookChatScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [group, setGroup] = useState<DocumentData | null>(null);
+  const [nook, setNook] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [messageText, setMessageText] = useState("");
@@ -81,9 +82,9 @@ export default function GroupChatScreen() {
   };
   useEffect(() => {
     if (!id) return;
-    const unsubscribe = onSnapshot(doc(db, "groups", id), (docSnap) => {
+    const unsubscribe = onSnapshot(doc(db, "nooks", id), (docSnap) => {
       if (docSnap.exists()) {
-        setGroup({ id: docSnap.id, ...docSnap.data() });
+        setNook({ id: docSnap.id, ...docSnap.data() });
       }
       setLoading(false);
     });
@@ -91,21 +92,28 @@ export default function GroupChatScreen() {
   }, [id]);
   useEffect(() => {
     if (!id || !myUid) return;
-    const unsubscribe = onSnapshot(doc(db, "groups", id, "members", myUid), (docSnap) => {
+    const unsubscribe = onSnapshot(doc(db, "nooks", id, "members", myUid), (docSnap) => {
       setMemberRole(docSnap.exists() ? docSnap.data().role : null);
     });
     return unsubscribe;
   }, [id, myUid]);
   useEffect(() => {
     if (!id || !myUid) return;
-    const unsubscribe = onSnapshot(doc(db, "groups", id, "joinRequests", myUid), (docSnap) => {
+    const unsubscribe = onSnapshot(doc(db, "nooks", id, "joinRequests", myUid), (docSnap) => {
       setHasPendingRequest(docSnap.exists());
     });
     return unsubscribe;
   }, [id, myUid]);
   useEffect(() => {
+    if (!id || !myUid) return;
+    const unsubscribe = onSnapshot(doc(db, "nooks", id, "limitIncreaseRequests", myUid), (docSnap) => {
+      setHasSentLimitRequest(docSnap.exists());
+    });
+    return unsubscribe;
+  }, [id, myUid]);
+  useEffect(() => {
     if (!id) return;
-    const q = query(collection(db, "groups", id, "messages"), orderBy("createdAt", "asc"));
+    const q = query(collection(db, "nooks", id, "messages"), orderBy("createdAt", "asc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as MessageItem[];
       setMessages(data);
@@ -126,14 +134,14 @@ export default function GroupChatScreen() {
     });
     return unsubscribe;
   }, []);
-  // ===== グループの、チャット画面を開いたら、まだ読んでいない、メッセージを、既読にする =====
+  // ===== Nookの、チャット画面を開いたら、まだ読んでいない、メッセージを、既読にする =====
   useEffect(() => {
     const markAllAsRead = async () => {
       if (!id || !myEmail) return;
       const unreadMessages = messages.filter((m) => !(m.readBy || []).includes(myEmail));
       await Promise.all(
         unreadMessages.map((m) =>
-          updateDoc(doc(db, "groups", id, "messages", m.id), {
+          updateDoc(doc(db, "nooks", id, "messages", m.id), {
             readBy: [...(m.readBy || []), myEmail],
           })
         )
@@ -143,37 +151,55 @@ export default function GroupChatScreen() {
   }, [id, messages, myEmail]);
   const isMember = !!memberRole;
   const isOwnerOrAdmin = memberRole === "owner" || memberRole === "admin";
+  // ===== 定員数の、増加を、リクエストする =====
+  const [hasSentLimitRequest, setHasSentLimitRequest] = useState(false);
+  const sendLimitIncreaseRequest = async () => {
+    if (!id || !myUid || !myEmail) return;
+    await setDoc(doc(db, "nooks", id, "limitIncreaseRequests", myUid), {
+      email: myEmail,
+      requestedAt: serverTimestamp(),
+    });
+    setHasSentLimitRequest(true);
+  };
+  const isFull = !!(nook?.memberLimit && (nook?.memberCount || 0) >= nook.memberLimit);
   const handleJoin = async () => {
-    if (!id || !myUid || !myEmail || !group) return;
+    if (!id || !myUid || !myEmail || !nook) return;
     if (memberRole) return;
-    if (group.requireApproval) {
-      await setDoc(doc(db, "groups", id, "joinRequests", myUid), {
+    // ===== 定員に、達していたら、参加できない =====
+    if (isFull) {
+      alert("このNookは、定員に、達しているため、参加できません");
+      return;
+    }
+    if (nook.requireApproval) {
+      await setDoc(doc(db, "nooks", id, "joinRequests", myUid), {
         email: myEmail,
         requestedAt: serverTimestamp(),
       });
     } else {
-      await setDoc(doc(db, "groups", id, "members", myUid), {
+      await setDoc(doc(db, "nooks", id, "members", myUid), {
         email: myEmail,
         role: "member",
         joinedAt: serverTimestamp(),
       });
+      await updateDoc(doc(db, "nooks", id), { memberCount: increment(1) });
     }
   };
   const handleLeave = async () => {
     if (!id || !myUid) return;
     if (memberRole === "owner") {
-      alert("オーナーは、退会できません。先に、グループを、削除するか、管理画面から、他のメンバーに、権限を、譲ってください。");
+      alert("オーナーは、退会できません。先に、Nookを、削除するか、管理画面から、他のメンバーに、権限を、譲ってください。");
       return;
     }
     if (isWeb) {
-      const confirmed = window.confirm("このグループを、退会しますか？");
+      const confirmed = window.confirm("このNookを、退会しますか？");
       if (!confirmed) return;
     }
-    await deleteDoc(doc(db, "groups", id, "members", myUid));
+    await deleteDoc(doc(db, "nooks", id, "members", myUid));
+    await updateDoc(doc(db, "nooks", id), { memberCount: increment(-1) });
   };
   const handleCancelRequest = async () => {
     if (!id || !myUid) return;
-    await deleteDoc(doc(db, "groups", id, "joinRequests", myUid));
+    await deleteDoc(doc(db, "nooks", id, "joinRequests", myUid));
   };
   // ===== メッセージの、日付を、「8月24日」のような、表示用の文字列に変換する =====
   const formatDateSeparator = (timestamp: any) => {
@@ -190,7 +216,7 @@ export default function GroupChatScreen() {
   // ===== 自分が送った、メッセージを削除する =====
   const handleDeleteMessage = async (messageId: string) => {
     if (!id) return;
-    await updateDoc(doc(db, "groups", id, "messages", messageId), {
+    await updateDoc(doc(db, "nooks", id, "messages", messageId), {
       text: "",
       deleted: true,
     });
@@ -222,7 +248,7 @@ export default function GroupChatScreen() {
   };
   const getSenderDisplayName = (senderEmail: string) => {
     if (senderEmail === myEmail) return "自分";
-    return senderEmail;
+    return userMap[senderEmail]?.username || senderEmail;
   };
   // ===== 絵文字リアクションの、候補ピッカーを開く =====
   const openReactionPicker = (messageId: string, event?: any) => {
@@ -246,7 +272,7 @@ export default function GroupChatScreen() {
     } else {
       reactions[emoji] = [...list, myEmail];
     }
-    await updateDoc(doc(db, "groups", id, "messages", messageId), { reactions });
+    await updateDoc(doc(db, "nooks", id, "messages", messageId), { reactions });
     setReactionPickerFor(null);
   };
   // ===== 画像・動画を選んで、アップロードし、メッセージとして送る =====
@@ -269,12 +295,12 @@ export default function GroupChatScreen() {
     try {
       const response = await fetch(asset.uri);
       const blob = await response.blob();
-      const folder = mediaType === "video" ? "groupVideos" : "groupImages";
+      const folder = mediaType === "video" ? "nookVideos" : "nookImages";
       const fileName = `${folder}/${myUid}_${Date.now()}`;
       const storageRef = ref(storage, fileName);
       await uploadBytes(storageRef, blob);
       const url = await getDownloadURL(storageRef);
-      await addDoc(collection(db, "groups", id, "messages"), {
+      await addDoc(collection(db, "nooks", id, "messages"), {
         senderEmail: myEmail,
         text: "",
         mediaUrl: url,
@@ -295,7 +321,7 @@ export default function GroupChatScreen() {
   };
   const handleSend = async () => {
     if (!messageText.trim() || !id || !myEmail) return;
-    await addDoc(collection(db, "groups", id, "messages"), {
+    await addDoc(collection(db, "nooks", id, "messages"), {
       senderEmail: myEmail,
       text: messageText.trim(),
       readBy: [myEmail],
@@ -314,11 +340,11 @@ export default function GroupChatScreen() {
       </View>
     );
   }
-  if (!group) {
+  if (!nook) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.centerContainer}>
-          <Text>グループが、見つかりません</Text>
+          <Text>Nookが、見つかりません</Text>
         </View>
       </SafeAreaView>
     );
@@ -333,29 +359,45 @@ export default function GroupChatScreen() {
               <Text style={styles.backText}>← 戻る</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {group.name}
+              {nook.name}
             </Text>
             <View style={{ width: 40 }} />
           </View>
           <View style={styles.joinPromptContainer}>
-            <View style={styles.groupIconWrapper}>
-              {group.iconUrl ? (
-                <Image source={{ uri: group.iconUrl }} style={styles.groupIcon} />
+            <View style={styles.nookIconWrapper}>
+              {nook.iconUrl ? (
+                <Image source={{ uri: nook.iconUrl }} style={styles.nookIcon} />
               ) : (
                 <MaterialIcons name="groups" size={30} color="#bbb" />
               )}
             </View>
-            <Text style={styles.groupName}>{group.name}</Text>
-            {group.description ? <Text style={styles.groupDescription}>{group.description}</Text> : null}
-            <Text style={styles.metaText}>メンバー {group.memberCount || 0}人</Text>
-            {hasPendingRequest ? (
+            <Text style={styles.nookName}>{nook.name}</Text>
+            {nook.description ? <Text style={styles.nookDescription}>{nook.description}</Text> : null}
+            <Text style={styles.metaText}>
+              メンバー {nook.memberCount || 0}人{nook.memberLimit ? ` / ${nook.memberLimit}人` : ""}
+            </Text>
+            {isFull ? (
+              // ===== 満員：参加ボタンの代わりに、リクエストボタンを、表示 =====
+              <>
+                <Text style={styles.fullNoticeText}>このNookは、満員のため、参加できません</Text>
+                {hasSentLimitRequest ? (
+                  <View style={styles.pendingButton}>
+                    <Text style={styles.pendingButtonText}>定員数の増加をリクエストしました</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.limitRequestButton} onPress={sendLimitIncreaseRequest}>
+                    <Text style={styles.limitRequestButtonText}>定員数の増加をリクエスト</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : hasPendingRequest ? (
               <TouchableOpacity style={styles.pendingButton} onPress={handleCancelRequest}>
                 <Text style={styles.pendingButtonText}>承認待ち（タップで、取り消し）</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={styles.joinButton} onPress={handleJoin}>
                 <Text style={styles.joinButtonText}>
-                  {group.requireApproval ? "参加を申請する" : "参加する"}
+                  {nook.requireApproval ? "参加を申請する" : "参加する"}
                 </Text>
               </TouchableOpacity>
             )}
@@ -373,17 +415,17 @@ export default function GroupChatScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <View style={styles.headerIconWrapper}>
-              {group.iconUrl ? (
-                <Image source={{ uri: group.iconUrl }} style={styles.headerIcon} />
+              {nook.iconUrl ? (
+                <Image source={{ uri: nook.iconUrl }} style={styles.headerIcon} />
               ) : (
                 <MaterialIcons name="groups" size={16} color="#bbb" />
               )}
             </View>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {group.name}
+              {nook.name}
             </Text>
           </View>
-          <TouchableOpacity onPress={() => router.push({ pathname: "/group/[id]/manage", params: { id } })}>
+          <TouchableOpacity onPress={() => router.push({ pathname: "/nook/[id]/manage", params: { id } })}>
             <MaterialIcons name={isOwnerOrAdmin ? "settings" : "info-outline"} size={22} color="#333" />
           </TouchableOpacity>
         </View>
@@ -662,7 +704,7 @@ export default function GroupChatScreen() {
               <View
                 style={[styles.chatActionPopup, { top: messageMenuPosition.top, left: messageMenuPosition.left }]}
               >
-                {messageMenuTarget && !messageMenuTarget.item.sharedPostId && (
+                {messageMenuTarget && (
                   <TouchableOpacity style={styles.chatActionItemWeb} onPress={startReplyFromMenu}>
                     <Text style={styles.chatActionText}>返信</Text>
                   </TouchableOpacity>
@@ -782,7 +824,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 30,
   },
-  groupIconWrapper: {
+  nookIconWrapper: {
     width: 72,
     height: 72,
     borderRadius: 36,
@@ -794,16 +836,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 12,
   },
-  groupIcon: {
+  nookIcon: {
     width: "100%",
     height: "100%",
   },
-  groupName: {
+  nookName: {
     fontSize: 18,
     fontWeight: "700",
     color: "#222",
   },
-  groupDescription: {
+  nookDescription: {
     fontSize: 13,
     color: "#666",
     textAlign: "center",
@@ -814,6 +856,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#999",
     marginTop: 10,
+  },
+  fullNoticeText: {
+    fontSize: 13,
+    color: "#c0392b",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  limitRequestButton: {
+    borderWidth: 1,
+    borderColor: "#8a6d1a",
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  limitRequestButtonText: {
+    color: "#8a6d1a",
+    fontSize: 14,
+    fontWeight: "600",
   },
   joinButton: {
     backgroundColor: "#222",
@@ -1087,6 +1148,7 @@ const styles = StyleSheet.create({
   },
   chatActionOverlayWeb: {
     flex: 1,
+    position: "relative",
     backgroundColor: "rgba(0,0,0,0.2)",
   },
   chatActionPopup: {
@@ -1102,10 +1164,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 6,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
   },
   chatActionItemWeb: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+    minHeight: 40,
+    justifyContent: "center",
   },
   chatActionText: {
     fontSize: 15,

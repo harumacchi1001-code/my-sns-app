@@ -3,44 +3,44 @@ import { useRouter } from "expo-router";
 import { collection, DocumentData, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import WebSidebar from "../components/WebSidebar";
 import { db } from "../firebaseConfig";
-type GroupItem = DocumentData & { id: string };
+type NookItem = DocumentData & { id: string };
 const isWeb = Platform.OS === "web";
-export default function GroupsListScreen() {
+export default function NooksListScreen() {
   const router = useRouter();
-  const [groups, setGroups] = useState<GroupItem[]>([]);
+  const [nooks, setNooks] = useState<NookItem[]>([]);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    const q = query(collection(db, "groups"), where("isPublic", "==", true));
+    const q = query(collection(db, "nooks"), where("isPublic", "==", true));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as GroupItem[];
+      const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as NookItem[];
       data.sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
-      setGroups(data);
+      setNooks(data);
       setLoading(false);
     });
     return unsubscribe;
   }, []);
-  const filteredGroups = searchText.trim()
-    ? groups.filter((g) => {
+  const filteredNooks = searchText.trim()
+    ? nooks.filter((n) => {
         const text = searchText.toLowerCase();
-        const name = (g.name || "").toLowerCase();
-        const description = (g.description || "").toLowerCase();
+        const name = (n.name || "").toLowerCase();
+        const description = (n.description || "").toLowerCase();
         return name.includes(text) || description.includes(text);
       })
-    : groups;
+    : nooks;
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -56,14 +56,14 @@ export default function GroupsListScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>グループ</Text>
+          <Text style={styles.headerTitle}>Nook</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.searchBarRow}>
           <View style={styles.searchInputWrapper}>
             <MaterialIcons name="search" size={18} color="#999" />
             <TextInput
-              placeholder="グループを検索"
+              placeholder="Nookを検索"
               value={searchText}
               onChangeText={setSearchText}
               style={styles.searchInputField}
@@ -72,41 +72,41 @@ export default function GroupsListScreen() {
           </View>
         </View>
         <FlatList
-          data={filteredGroups}
+          data={filteredNooks}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
-            <TouchableOpacity style={styles.createGroupRow} onPress={() => router.push("/group/create")}>
-              <View style={styles.createGroupIconWrapper}>
+            <TouchableOpacity style={styles.createNookRow} onPress={() => router.push("/nook/create")}>
+              <View style={styles.createNookIconWrapper}>
                 <MaterialIcons name="add" size={20} color="#4a90e2" />
               </View>
-              <Text style={styles.createGroupText}>新しい、グループを作成</Text>
+              <Text style={styles.createNookText}>新しい、Nookを作成</Text>
             </TouchableOpacity>
           }
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Text style={styles.emptyText}>
-                {searchText ? "見つかりませんでした" : "まだ、公開グループが、ありません"}
+                {searchText ? "見つかりませんでした" : "まだ、公開Nookが、ありません"}
               </Text>
             </View>
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.groupRow}
-              onPress={() => router.push({ pathname: "/group/[id]", params: { id: item.id } })}
+              style={styles.nookRow}
+              onPress={() => router.push({ pathname: "/nook/[id]", params: { id: item.id } })}
             >
-              <View style={styles.groupIconWrapper}>
+              <View style={styles.nookIconWrapper}>
                 {item.iconUrl ? (
-                  <Image source={{ uri: item.iconUrl }} style={styles.groupIcon} />
+                  <Image source={{ uri: item.iconUrl }} style={styles.nookIcon} />
                 ) : (
                   <MaterialIcons name="groups" size={22} color="#bbb" />
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.groupRowName} numberOfLines={1}>
-                  {item.name || "無題のグループ"}
+                <Text style={styles.nookRowName} numberOfLines={1}>
+                  {item.name || "無題のNook"}
                 </Text>
-                <Text style={styles.groupRowMeta} numberOfLines={1}>
+                <Text style={styles.nookRowMeta} numberOfLines={1}>
                   メンバー {item.memberCount || 0}人
                   {item.description ? ` ・ ${item.description}` : ""}
                 </Text>
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 20,
   },
-  createGroupRow: {
+  createNookRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f0f0f0",
     marginBottom: 4,
   },
-  createGroupIconWrapper: {
+  createNookIconWrapper: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -203,12 +203,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  createGroupText: {
+  createNookText: {
     fontSize: 14,
     fontWeight: "600",
     color: "#4a90e2",
   },
-  groupRow: {
+  nookRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: "#f0f0f0",
   },
-  groupIconWrapper: {
+  nookIconWrapper: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -227,16 +227,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     overflow: "hidden",
   },
-  groupIcon: {
+  nookIcon: {
     width: "100%",
     height: "100%",
   },
-  groupRowName: {
+  nookRowName: {
     fontSize: 14,
     fontWeight: "600",
     color: "#222",
   },
-  groupRowMeta: {
+  nookRowMeta: {
     fontSize: 12,
     color: "#999",
     marginTop: 2,

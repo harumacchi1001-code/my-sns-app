@@ -36,7 +36,7 @@ type PostItem = {
   hashtags?: string[];
   authorEmail?: string;
 };
-type GroupItem = {
+type NookItem = {
   id: string;
   name?: string;
   description?: string;
@@ -49,8 +49,8 @@ type HashtagCandidate = {
   tag: string;
   count: number;
 };
-// ===== アカウント／投稿／タグ／グループの、4つのタブ =====
-const TABS = ["user", "post", "hashtag", "group"] as const;
+// ===== アカウント／投稿／タグ／Nookの、4つのタブ =====
+const TABS = ["user", "post", "hashtag", "nook"] as const;
 type TabMode = (typeof TABS)[number];
 const DAY_MS = 24 * 60 * 60 * 1000;
 // ===== ここからWeb版専用 =====
@@ -80,7 +80,7 @@ export default function SearchScreen() {
   const [searchText, setSearchText] = useState("");
   const [users, setUsers] = useState<UserItem[]>([]);
   const [posts, setPosts] = useState<PostItem[]>([]);
-  const [groups, setGroups] = useState<GroupItem[]>([]);
+  const [nooks, setNooks] = useState<NookItem[]>([]);
   const [loading, setLoading] = useState(true);
   // ===== 発見（ユーザー／投稿を選ぶ）中央カードメニューの、表示状態 =====
   const [discoverMenuVisible, setDiscoverMenuVisible] = useState(false);
@@ -128,18 +128,18 @@ export default function SearchScreen() {
       }));
       setStories(data);
     });
-    // ===== 公開グループの一覧を取得 =====
-    const gq = query(collection(db, "groups"), where("isPublic", "==", true));
-    const unsubscribeGroups = onSnapshot(gq, (snapshot) => {
-      const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as GroupItem[];
+    // ===== 公開Nookの一覧を取得 =====
+    const gq = query(collection(db, "nooks"), where("isPublic", "==", true));
+    const unsubscribeNooks = onSnapshot(gq, (snapshot) => {
+      const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as NookItem[];
       data.sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
-      setGroups(data);
+      setNooks(data);
     });
     return () => {
       unsubscribeUsers();
       unsubscribePosts();
       unsubscribeStories();
-      unsubscribeGroups();
+      unsubscribeNooks();
     };
   }, []);
   // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
@@ -178,15 +178,15 @@ export default function SearchScreen() {
   });
   // ===== 「タグ」タブ：ハッシュタグ名の候補（件数付き） =====
   const hashtagCandidates = getHashtagCandidates(posts, searchText);
-  // ===== 「グループ」タブ：グループ名・説明文で、絞り込む =====
-  const filteredGroups = searchText.trim()
-    ? groups.filter((g) => {
+  // ===== 「Nook」タブ：Nook名・説明文で、絞り込む =====
+  const filteredNooks = searchText.trim()
+    ? nooks.filter((n) => {
         const text = searchText.toLowerCase();
-        const name = (g.name || "").toLowerCase();
-        const description = (g.description || "").toLowerCase();
+        const name = (n.name || "").toLowerCase();
+        const description = (n.description || "").toLowerCase();
         return name.includes(text) || description.includes(text);
       })
-    : groups;
+    : nooks;
   // ===== ハッシュタグ候補をタップしたら、新しい検索画面を、重ねて開く =====
   const handleSelectHashtagCandidate = (tag: string) => {
     router.push(`/hashtag-search/${encodeURIComponent(tag)}` as any);
@@ -211,13 +211,13 @@ export default function SearchScreen() {
     if (key === "user") return t("search.modeUser");
     if (key === "post") return t("search.modePost");
     if (key === "hashtag") return t("search.modeHashtag");
-    return "グループ";
+    return "Nook";
   };
   const getPlaceholder = () => {
     if (mode === "user") return t("search.placeholderUser");
     if (mode === "post") return t("search.placeholderPost");
     if (mode === "hashtag") return t("search.placeholderHashtag");
-    return "グループを検索";
+    return "Nookを検索";
   };
   if (loading) {
     return (
@@ -419,34 +419,34 @@ export default function SearchScreen() {
                   )}
                 />
               </View>
-              {/* ===== グループ：公開グループの一覧（検索文字があれば絞り込み） ===== */}
+              {/* ===== Nook：公開Nookの一覧（検索文字があれば絞り込み） ===== */}
               <View style={[styles.tabPage, { width: containerWidth }]}>
                 <FlatList
-                  data={filteredGroups}
+                  data={filteredNooks}
                   keyExtractor={(item) => item.id}
                   contentContainerStyle={styles.listContent}
                   ListEmptyComponent={
                     <View style={styles.centerContainer}>
                       <Text style={styles.emptyText}>
-                        {searchText ? "見つかりませんでした" : "まだ、公開グループが、ありません"}
+                        {searchText ? "見つかりませんでした" : "まだ、公開Nookが、ありません"}
                       </Text>
                     </View>
                   }
                   ListHeaderComponent={
                     <TouchableOpacity
                       style={styles.createGroupRow}
-                      onPress={() => router.push("/group/create")}
+                      onPress={() => router.push("/nook/create")}
                     >
                       <View style={styles.createGroupIconWrapper}>
                         <MaterialIcons name="add" size={20} color="#4a90e2" />
                       </View>
-                      <Text style={styles.createGroupText}>新しい、グループを作成</Text>
+                      <Text style={styles.createGroupText}>新しい、Nookを作成</Text>
                     </TouchableOpacity>
                   }
                   renderItem={({ item }) => (
                     <TouchableOpacity
                       style={styles.groupRow}
-                      onPress={() => router.push({ pathname: "/group/[id]", params: { id: item.id } })}
+                      onPress={() => router.push({ pathname: "/nook/[id]", params: { id: item.id } })}
                     >
                       <View style={styles.groupIconWrapperSmall}>
                         {item.iconUrl ? (
@@ -457,7 +457,7 @@ export default function SearchScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.groupRowName} numberOfLines={1}>
-                          {item.name || "無題のグループ"}
+                          {item.name || "無題のNook"}
                         </Text>
                         <Text style={styles.groupRowMeta} numberOfLines={1}>
                           メンバー {item.memberCount || 0}人

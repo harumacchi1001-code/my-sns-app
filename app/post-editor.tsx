@@ -87,10 +87,10 @@ export default function PostScreen() {
   const [initialBodyContent, setInitialBodyContent] = useState("");
   // ===== 自由入力モードでの、記事全体の、配色テーマ（ツールバーから、選ぶ。必ず、いずれかのテーマが、選ばれた状態にする） =====
   const [freeWriteThemeId, setFreeWriteThemeId] = useState<string>("simple");
-  // ===== 自分が、参加している、グループの一覧（投稿先として、選べるように） =====
-  const [myGroups, setMyGroups] = useState<{ id: string; name: string }[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [groupMenuVisible, setGroupMenuVisible] = useState(false);
+  // ===== 自分が、参加している、Nookの一覧（投稿先として、選べるように） =====
+  const [myNooks, setMyNooks] = useState<{ id: string; name: string }[]>([]);
+  const [selectedNookId, setSelectedNookId] = useState<string | null>(null);
+  const [nookMenuVisible, setNookMenuVisible] = useState(false);
   // ===== 自由入力モードで、選ばれている、配色の、実際のデータ =====
   const freeWriteTheme = freeWriteThemeId ? getColorTheme(freeWriteThemeId as ColorThemeId) : null;
   // ===== テンプレート使用時、配色が、まだ、指定されていなければ、自由入力モードの、配色（初期値）を、代わりに、使う =====
@@ -102,24 +102,24 @@ export default function PostScreen() {
   // ===== 動画だけは、まだ本文の中に埋め込めないため、別枠のリストとして持つ =====
   const [videoBlocks, setVideoBlocks] = useState<VideoBlock[]>([]);
   const lastLoadedDraftId = useRef<string | null>(null);
-  // ===== 自分が、参加している、グループの一覧を、取得する（collectionGroupで、自分のuidを持つmembersを検索） =====
+  // ===== 自分が、参加している、Nookの一覧を、取得する =====
   useEffect(() => {
     const myUid = auth.currentUser?.uid;
     if (!myUid) return;
-    const loadMyGroups = async () => {
-      const allGroupsSnap = await getDocs(collection(db, "groups"));
-      const groups: { id: string; name: string }[] = [];
+    const loadMyNooks = async () => {
+      const allNooksSnap = await getDocs(collection(db, "nooks"));
+      const nooks: { id: string; name: string }[] = [];
       await Promise.all(
-        allGroupsSnap.docs.map(async (groupDoc) => {
-          const memberSnap = await getDoc(doc(db, "groups", groupDoc.id, "members", myUid));
+        allNooksSnap.docs.map(async (nookDoc) => {
+          const memberSnap = await getDoc(doc(db, "nooks", nookDoc.id, "members", myUid));
           if (memberSnap.exists()) {
-            groups.push({ id: groupDoc.id, name: groupDoc.data()?.name || "無題のグループ" });
+            nooks.push({ id: nookDoc.id, name: nookDoc.data()?.name || "無題のNook" });
           }
         })
       );
-      setMyGroups(groups);
+      setMyNooks(nooks);
     };
-    loadMyGroups();
+    loadMyNooks();
   }, []);
   const resetForm = () => {
     setTitle("");
@@ -137,7 +137,7 @@ export default function PostScreen() {
     setTemplateValues({});
     setRemovedFieldKeys(new Set());
     setFreeWriteThemeId("simple");
-    setSelectedGroupId(null);
+    setSelectedNookId(null);
     router.setParams({ draftId: undefined });
   };
   useFocusEffect(
@@ -474,7 +474,7 @@ export default function PostScreen() {
       templateThemeId: finalThemeId || null,
     };
   };
-    const handlePublish = async () => {
+  const handlePublish = async () => {
     if (!(await hasAnyContent())) {
       alert(t("post.requiredFields"));
       return;
@@ -492,10 +492,10 @@ export default function PostScreen() {
         });
         newPostId = newPostRef.id;
       }
-      // ===== グループを、選んでいれば、そのグループのチャットに、投稿を、共有カードとして送る =====
-      if (selectedGroupId && newPostId) {
+      // ===== Nookを、選んでいれば、そのNookのチャットに、投稿を、共有カードとして送る =====
+      if (selectedNookId && newPostId) {
         const myEmail = auth.currentUser?.email;
-        await addDoc(collection(db, "groups", selectedGroupId, "messages"), {
+        await addDoc(collection(db, "nooks", selectedNookId, "messages"), {
           senderEmail: myEmail,
           sharedPostId: newPostId,
           createdAt: serverTimestamp(),
@@ -587,14 +587,14 @@ export default function PostScreen() {
               />
             ))}
           </View>
-          {/* ===== グループへの、投稿を、選べる、ボタン（参加している、グループが、あるときだけ、表示） ===== */}
-          {myGroups.length > 0 && (
-            <TouchableOpacity style={styles.groupSelectButton} onPress={() => setGroupMenuVisible(true)}>
-              <MaterialIcons name="groups" size={16} color={selectedGroupId ? "#4a90e2" : "#999"} />
-              <Text style={[styles.groupSelectButtonText, selectedGroupId && { color: "#4a90e2" }]} numberOfLines={1}>
-                {selectedGroupId
-                  ? myGroups.find((g) => g.id === selectedGroupId)?.name || "グループ"
-                  : "グループに投稿"}
+          {/* ===== Nookへの、投稿を、選べる、ボタン（参加している、Nookが、あるときだけ、表示） ===== */}
+          {myNooks.length > 0 && (
+            <TouchableOpacity style={styles.groupSelectButton} onPress={() => setNookMenuVisible(true)}>
+              <MaterialIcons name="groups" size={16} color={selectedNookId ? "#4a90e2" : "#999"} />
+              <Text style={[styles.groupSelectButtonText, selectedNookId && { color: "#4a90e2" }]} numberOfLines={1}>
+                {selectedNookId
+                  ? myNooks.find((n) => n.id === selectedNookId)?.name || "Nook"
+                  : "Nookに投稿"}
               </Text>
             </TouchableOpacity>
           )}
@@ -611,33 +611,33 @@ export default function PostScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        {/* ===== グループ選択、モーダル ===== */}
-        <Modal visible={groupMenuVisible} transparent animationType="fade" onRequestClose={() => setGroupMenuVisible(false)}>
-          <TouchableOpacity style={styles.groupMenuOverlay} activeOpacity={1} onPress={() => setGroupMenuVisible(false)}>
+        {/* ===== Nook選択、モーダル ===== */}
+        <Modal visible={nookMenuVisible} transparent animationType="fade" onRequestClose={() => setNookMenuVisible(false)}>
+          <TouchableOpacity style={styles.groupMenuOverlay} activeOpacity={1} onPress={() => setNookMenuVisible(false)}>
             <TouchableOpacity activeOpacity={1} style={styles.groupMenuCard}>
-              <Text style={styles.groupMenuTitle}>投稿先の、グループ</Text>
+              <Text style={styles.groupMenuTitle}>投稿先の、Nook</Text>
               <TouchableOpacity
                 style={styles.groupMenuItem}
                 onPress={() => {
-                  setSelectedGroupId(null);
-                  setGroupMenuVisible(false);
+                  setSelectedNookId(null);
+                  setNookMenuVisible(false);
                 }}
               >
-                <Text style={!selectedGroupId ? styles.groupMenuItemTextActive : styles.groupMenuItemText}>
-                  グループに、投稿しない
+                <Text style={!selectedNookId ? styles.groupMenuItemTextActive : styles.groupMenuItemText}>
+                  Nookに、投稿しない
                 </Text>
               </TouchableOpacity>
-              {myGroups.map((g) => (
+              {myNooks.map((n) => (
                 <TouchableOpacity
-                  key={g.id}
+                  key={n.id}
                   style={styles.groupMenuItem}
                   onPress={() => {
-                    setSelectedGroupId(g.id);
-                    setGroupMenuVisible(false);
+                    setSelectedNookId(n.id);
+                    setNookMenuVisible(false);
                   }}
                 >
-                  <Text style={selectedGroupId === g.id ? styles.groupMenuItemTextActive : styles.groupMenuItemText}>
-                    {g.name}
+                  <Text style={selectedNookId === n.id ? styles.groupMenuItemTextActive : styles.groupMenuItemText}>
+                    {n.name}
                   </Text>
                 </TouchableOpacity>
               ))}

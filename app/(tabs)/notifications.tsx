@@ -16,19 +16,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import StampFrame from "../../components/StampFrame";
 import { auth, db } from "../../firebaseConfig";
 type Notification = DocumentData & { id: string };
-
 const DAY_MS = 24 * 60 * 60 * 1000;
-
 export default function NotificationsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-
   // ===== 送信者のユーザー情報・ストーリー関連の状態 =====
   const [userMap, setUserMap] = useState<Record<string, DocumentData>>({});
   const [stories, setStories] = useState<DocumentData[]>([]);
-
   useEffect(() => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail) return;
@@ -47,7 +43,6 @@ export default function NotificationsScreen() {
     });
     return unsubscribe;
   }, []);
-
   // ===== ユーザー情報・ストーリー一覧を取得 =====
   useEffect(() => {
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -60,7 +55,6 @@ export default function NotificationsScreen() {
       });
       setUserMap(map);
     });
-
     const unsubscribeStories = onSnapshot(collection(db, "stories"), (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -68,13 +62,11 @@ export default function NotificationsScreen() {
       }));
       setStories(data);
     });
-
     return () => {
       unsubscribeUsers();
       unsubscribeStories();
     };
   }, []);
-
   // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
   const getUserStories = (userId: string) => {
     const now = Date.now();
@@ -84,9 +76,7 @@ export default function NotificationsScreen() {
       return now - createdMs < DAY_MS;
     });
   };
-
   const myUid = auth.currentUser?.uid;
-
   const formatDate = (timestamp: any) => {
     if (!timestamp?.toDate) return "";
     const date = timestamp.toDate();
@@ -106,11 +96,11 @@ export default function NotificationsScreen() {
         if (notification.type === "follow_request") {
       return `${name}${t("notifications.followRequestMessage")}`;
     }
-    if (notification.type === "groupApproved") {
-      return `「${notification.groupName}」への参加が承認されました`;
+    if (notification.type === "nookApproved") {
+      return `「${notification.nookName}」への参加が承認されました`;
     }
-    if (notification.type === "groupNewPost") {
-      return `${name}が「${notification.groupName}」に投稿しました`;
+    if (notification.type === "nookNewPost") {
+      return `${name}が「${notification.nookName}」に投稿しました`;
     }
     return "";
   };
@@ -118,7 +108,7 @@ export default function NotificationsScreen() {
     if (type === "like") return "favorite";
     if (type === "comment") return "chat-bubble-outline";
     if (type === "follow_request") return "person-add";
-    if (type === "groupApproved" || type === "groupNewPost") return "groups";
+    if (type === "nookApproved" || type === "nookNewPost") return "groups";
     return "person";
   };
   const getIconColor = (type: string) => {
@@ -146,26 +136,23 @@ export default function NotificationsScreen() {
       }
       return;
     }
-        if (notification.type === "groupNewPost" && notification.postId) {
+    if (notification.type === "nookNewPost" && notification.postId) {
       router.push({ pathname: "/post/[id]", params: { id: notification.postId } });
       return;
     }
-    if (notification.type === "groupApproved" && notification.groupId) {
-      router.push({ pathname: "/group/[id]", params: { id: notification.groupId } });
+    if (notification.type === "nookApproved" && notification.nookId) {
+      router.push({ pathname: "/nook/[id]", params: { id: notification.nookId } });
       return;
     }
     if (notification.postId) {
       router.push({ pathname: "/post/[id]", params: { id: notification.postId } });
     }
   };
-
   // ===== 送信者アイコンをタップしたときの動作：ストーリーがあれば閲覧画面、なければプロフィール =====
   const handleAvatarPress = async (notification: Notification, event: any) => {
     event.stopPropagation();
-
     const sender = userMap[notification.fromUserEmail];
     if (!sender?.id) return;
-
     const senderStories = getUserStories(sender.id);
     if (senderStories.length > 0) {
       router.push({ pathname: "/story-view", params: { authorId: sender.id } });
@@ -173,7 +160,6 @@ export default function NotificationsScreen() {
       router.push({ pathname: "/user/[id]", params: { id: sender.id } });
     }
   };
-
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -197,7 +183,6 @@ export default function NotificationsScreen() {
             const sender = userMap[item.fromUserEmail];
             const senderStories = sender?.id ? getUserStories(sender.id) : [];
             const hasUnread = senderStories.some((s) => !(s.viewedBy || []).includes(myUid));
-
             return (
               <TouchableOpacity
                 style={[styles.notificationItem, !item.read && styles.unreadItem]}

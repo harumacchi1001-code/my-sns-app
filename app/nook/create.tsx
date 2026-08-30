@@ -1,34 +1,54 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GENRE_TEMPLATES } from "../../constants/postTemplates";
 import { auth, db, storage } from "../../firebaseConfig";
 const isWeb = Platform.OS === "web";
-export default function GroupCreateScreen() {
+const MEMBER_LIMIT_OPTIONS = [10, 30, 50, 100, 150, 200, 300, 400, 500];
+// ===== 1アカウントが、作成できる、Nookの、上限数（将来的に、課金・ランクで、変える、余地を、持たせる） =====
+const MAX_NOOKS_PER_ACCOUNT = 3;
+export default function NookCreateScreen() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [genreId, setGenreId] = useState<string | null>(null);
+  const [customGenre, setCustomGenre] = useState("");
   const [icon, setIcon] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(true);
   const [requireApproval, setRequireApproval] = useState(false);
+  // ===== 定員（デフォルトは30人）。「その他」を選ぶと、自由入力になる =====
+  const [memberLimit, setMemberLimit] = useState<number>(30);
+  const [isCustomLimit, setIsCustomLimit] = useState(false);
+  const [customLimitText, setCustomLimitText] = useState("");
   const [saving, setSaving] = useState(false);
+  // ===== 自分が、すでに、作成している（オーナーの）、Nookの、数 =====
+  const [ownedNookCount, setOwnedNookCount] = useState<number | null>(null);
+  useEffect(() => {
+    const checkOwnedCount = async () => {
+      const myEmail = auth.currentUser?.email;
+      if (!myEmail) return;
+      const q = query(collection(db, "nooks"), where("ownerEmail", "==", myEmail));
+      const snapshot = await getDocs(q);
+      setOwnedNookCount(snapshot.size);
+    };
+    checkOwnedCount();
+  }, []);
   const pickIcon = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
@@ -43,10 +63,28 @@ export default function GroupCreateScreen() {
       setIcon(result.assets[0].uri);
     }
   };
+  const hasReachedLimit = ownedNookCount !== null && ownedNookCount >= MAX_NOOKS_PER_ACCOUNT;
   const handleCreate = async () => {
-    if (!name.trim()) {
-      alert("グループ名を、入力してください");
+    if (hasReachedLimit) {
+      alert(`作成できるNookは、1アカウントにつき${MAX_NOOKS_PER_ACCOUNT}個までです`);
       return;
+    }
+    if (!name.trim()) {
+      alert("Nook名を、入力してください");
+      return;
+    }
+    if (genreId === "other" && !customGenre.trim()) {
+      alert("ジャンルを、入力してください");
+      return;
+    }
+    let finalMemberLimit = memberLimit;
+    if (isCustomLimit) {
+      const parsed = parseInt(customLimitText, 10);
+      if (!parsed || parsed < 1 || parsed > 500) {
+        alert("定員は、1〜500の、範囲で、入力してください");
+        return;
+      }
+      finalMemberLimit = parsed;
     }
     const myEmail = auth.currentUser?.email;
     const myUid = auth.currentUser?.uid;
@@ -57,30 +95,32 @@ export default function GroupCreateScreen() {
       if (icon) {
         const response = await fetch(icon);
         const blob = await response.blob();
-        const fileName = `groupIcons/${myUid}_${Date.now()}`;
+        const fileName = `nookIcons/${myUid}_${Date.now()}`;
         const storageRef = ref(storage, fileName);
         await uploadBytes(storageRef, blob);
         iconUrl = await getDownloadURL(storageRef);
       }
-      const groupRef = await addDoc(collection(db, "groups"), {
+      const nookRef = await addDoc(collection(db, "nooks"), {
         name: name.trim(),
         description: description.trim(),
         genreId: genreId || null,
+        customGenre: genreId === "other" ? customGenre.trim() : null,
         iconUrl,
         isPublic,
         requireApproval,
+        memberLimit: finalMemberLimit,
         ownerEmail: myEmail,
         memberCount: 1,
         createdAt: serverTimestamp(),
       });
       // ===== 作成者を、自動的に、オーナーとして、メンバーに追加する =====
-      await setDoc(doc(db, "groups", groupRef.id, "members", myUid), {
+      await setDoc(doc(db, "nooks", nookRef.id, "members", myUid), {
         email: myEmail,
         role: "owner",
         joinedAt: serverTimestamp(),
       });
       setSaving(false);
-      router.replace({ pathname: "/group/[id]", params: { id: groupRef.id } });
+      router.replace({ pathname: "/nook/[id]", params: { id: nookRef.id } });
     } catch (error: any) {
       setSaving(false);
       alert("作成に失敗しました：" + error.message);
@@ -93,7 +133,7 @@ export default function GroupCreateScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>グループを作成</Text>
+          <Text style={styles.headerTitle}>Nookを作成</Text>
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -104,7 +144,7 @@ export default function GroupCreateScreen() {
               <MaterialIcons name="add-a-photo" size={28} color="#bbb" />
             )}
           </TouchableOpacity>
-          <Text style={styles.fieldLabel}>グループ名</Text>
+          <Text style={styles.fieldLabel}>Nook名</Text>
           <TextInput
             value={name}
             onChangeText={setName}
@@ -115,7 +155,7 @@ export default function GroupCreateScreen() {
           <TextInput
             value={description}
             onChangeText={setDescription}
-            placeholder="どんな、グループか、簡単に、説明してください"
+            placeholder="どんな、Nookか、簡単に、説明してください"
             style={[styles.input, styles.textarea]}
             multiline
           />
@@ -138,10 +178,91 @@ export default function GroupCreateScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
+            <TouchableOpacity
+              style={[styles.genreChip, styles.genreChipOther, genreId === "other" && styles.genreChipActive]}
+              onPress={() => setGenreId("other")}
+            >
+              <Text style={genreId === "other" ? styles.genreChipTextActive : styles.genreChipText}>
+                + その他
+              </Text>
+            </TouchableOpacity>
           </View>
+          {genreId === "other" && (
+            <TextInput
+              value={customGenre}
+              onChangeText={setCustomGenre}
+              placeholder="ジャンルを、自由に、入力（例：ボードゲーム）"
+              style={[styles.input, { marginTop: 8 }]}
+            />
+          )}
+          <Text style={styles.fieldLabel}>定員</Text>
+          {isWeb ? (
+            <select
+              value={isCustomLimit ? "other" : String(memberLimit)}
+              onChange={(e: any) => {
+                const val = e.target.value;
+                if (val === "other") {
+                  setIsCustomLimit(true);
+                } else {
+                  setIsCustomLimit(false);
+                  setMemberLimit(Number(val));
+                }
+              }}
+              style={{
+                width: 160,
+                height: 38,
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                paddingLeft: 10,
+                fontSize: 14,
+              }}
+            >
+              {MEMBER_LIMIT_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}人まで
+                </option>
+              ))}
+              <option value="other">その他（自由入力）</option>
+            </select>
+          ) : (
+            <View style={styles.genreRow}>
+              {MEMBER_LIMIT_OPTIONS.map((n) => (
+                <TouchableOpacity
+                  key={n}
+                  style={[styles.genreChip, !isCustomLimit && memberLimit === n && styles.genreChipActive]}
+                  onPress={() => {
+                    setIsCustomLimit(false);
+                    setMemberLimit(n);
+                  }}
+                >
+                  <Text style={!isCustomLimit && memberLimit === n ? styles.genreChipTextActive : styles.genreChipText}>
+                    {n}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.genreChip, styles.genreChipOther, isCustomLimit && styles.genreChipActive]}
+                onPress={() => setIsCustomLimit(true)}
+              >
+                <Text style={isCustomLimit ? styles.genreChipTextActive : styles.genreChipText}>その他</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {isCustomLimit && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+              <TextInput
+                value={customLimitText}
+                onChangeText={setCustomLimitText}
+                placeholder="1〜500"
+                keyboardType="numeric"
+                style={[styles.input, { width: 100 }]}
+              />
+              <Text style={{ fontSize: 13, color: "#666" }}>人まで</Text>
+            </View>
+          )}
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>公開グループにする</Text>
+              <Text style={styles.switchLabel}>公開Nookにする</Text>
               <Text style={styles.switchHint}>オフにすると、検索や、一覧に、表示されません</Text>
             </View>
             <Switch value={isPublic} onValueChange={setIsPublic} />
@@ -153,13 +274,27 @@ export default function GroupCreateScreen() {
             </View>
             <Switch value={requireApproval} onValueChange={setRequireApproval} />
           </View>
+          {ownedNookCount !== null && (
+            <View style={styles.limitNoticeBox}>
+              <MaterialIcons name="info-outline" size={18} color="#666" />
+              <Text style={styles.limitNoticeText}>
+                作成できるNookは、1アカウントにつき{MAX_NOOKS_PER_ACCOUNT}個までです（残り {Math.max(0, MAX_NOOKS_PER_ACCOUNT - ownedNookCount)}個）
+              </Text>
+            </View>
+          )}
         </ScrollView>
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.createButton} onPress={handleCreate} disabled={saving}>
+          <TouchableOpacity
+            style={[styles.createButton, hasReachedLimit && styles.createButtonDisabled]}
+            onPress={handleCreate}
+            disabled={saving || hasReachedLimit}
+          >
             {saving ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.createButtonText}>グループを作成する</Text>
+              <Text style={styles.createButtonText}>
+                {hasReachedLimit ? "作成の上限に達しています" : "Nookを作成する"}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -252,6 +387,9 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     backgroundColor: "#fafafa",
   },
+  genreChipOther: {
+    borderStyle: "dashed",
+  },
   genreChipActive: {
     backgroundColor: "#222",
     borderColor: "#222",
@@ -284,6 +422,20 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 2,
   },
+  limitNoticeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#f7f7f7",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  limitNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#666",
+  },
   footer: {
     padding: 16,
     borderTopWidth: 0.5,
@@ -294,6 +446,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",
+  },
+  createButtonDisabled: {
+    backgroundColor: "#ccc",
   },
   createButtonText: {
     color: "#fff",

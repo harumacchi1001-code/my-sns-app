@@ -42,11 +42,11 @@ export default function ProfileScreen() {
   const [privatePosts, setPrivatePosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"published" | "draft" | "private" | "group">("published");
-   // ===== 自分が、参加している、グループの一覧 =====
-  const [myGroups, setMyGroups] = useState<(DocumentData & { id: string })[]>([]);
-  // ===== 各グループの、未読メッセージ数（グループID → 件数） =====
-  const [groupUnreadCounts, setGroupUnreadCounts] = useState<Record<string, number>>({});
+  const [activeTab, setActiveTab] = useState<"published" | "draft" | "private" | "nook">("published");
+   // ===== 自分が、参加している、Nookの一覧 =====
+  const [myNooks, setMyNooks] = useState<(DocumentData & { id: string })[]>([]);
+  // ===== 各Nookの、未読メッセージ数（NookID → 件数） =====
+  const [nookUnreadCounts, setNookUnreadCounts] = useState<Record<string, number>>({});
   const [menuPost, setMenuPost] = useState<Post | null>(null);
   // ===== ここからWeb版専用 =====
   const [webMenuVisible, setWebMenuVisible] = useState(false);
@@ -134,38 +134,38 @@ export default function ProfileScreen() {
     });
     return () => unsubscribeAuth();
   }, []);
-  // ===== 自分が、参加している、グループの一覧を、取得する（全グループを走査して、自分がmembersに、いるか確認） =====
+  // ===== 自分が、参加している、Nookの一覧を、取得する（全Nookを走査して、自分がmembersに、いるか確認） =====
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (!user) return;
-      const loadMyGroups = async () => {
-        const allGroupsSnap = await getDocs(collection(db, "groups"));
-        const groups: (DocumentData & { id: string })[] = [];
+      const loadMyNooks = async () => {
+        const allNooksSnap = await getDocs(collection(db, "nooks"));
+        const nooks: (DocumentData & { id: string })[] = [];
         await Promise.all(
-          allGroupsSnap.docs.map(async (groupDoc) => {
-            const memberSnap = await getDoc(doc(db, "groups", groupDoc.id, "members", user.uid));
+          allNooksSnap.docs.map(async (nookDoc) => {
+            const memberSnap = await getDoc(doc(db, "nooks", nookDoc.id, "members", user.uid));
             if (memberSnap.exists()) {
-              groups.push({ id: groupDoc.id, ...groupDoc.data() });
+              nooks.push({ id: nookDoc.id, ...nookDoc.data() });
             }
           })
         );
-        setMyGroups(groups);
-        // ===== 参加している、それぞれの、グループの、未読メッセージ数を、数える =====
+        setMyNooks(nooks);
+        // ===== 参加している、それぞれの、Nookの、未読メッセージ数を、数える =====
         const myEmail = user.email;
         const counts: Record<string, number> = {};
         await Promise.all(
-          groups.map(async (g) => {
-            const messagesSnap = await getDocs(collection(db, "groups", g.id, "messages"));
+          nooks.map(async (n) => {
+            const messagesSnap = await getDocs(collection(db, "nooks", n.id, "messages"));
             const unread = messagesSnap.docs.filter((m) => {
               const readBy: string[] = m.data().readBy || [];
               return !readBy.includes(myEmail || "");
             }).length;
-            counts[g.id] = unread;
+            counts[n.id] = unread;
           })
         );
-        setGroupUnreadCounts(counts);
+        setNookUnreadCounts(counts);
       };
-      loadMyGroups();
+      loadMyNooks();
     });
     return () => unsubscribeAuth();
   }, []);
@@ -330,11 +330,11 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
                 <FlatList
-          key={activeTab === "group" ? "group-list" : "post-grid"}
-          data={activeTab === "group" ? myGroups : displayedPosts}
+          key={activeTab === "nook" ? "nook-list" : "post-grid"}
+          data={activeTab === "nook" ? myNooks : displayedPosts}
           keyExtractor={(item) => item.id}
-          numColumns={activeTab === "group" ? 1 : 2}
-          columnWrapperStyle={activeTab === "group" ? undefined : styles.row}
+          numColumns={activeTab === "nook" ? 1 : 2}
+          columnWrapperStyle={activeTab === "nook" ? undefined : styles.row}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
@@ -451,11 +451,11 @@ export default function ProfileScreen() {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.tabButton, activeTab === "group" && styles.tabButtonActive]}
-                  onPress={() => setActiveTab("group")}
+                  style={[styles.tabButton, activeTab === "nook" && styles.tabButtonActive]}
+                  onPress={() => setActiveTab("nook")}
                 >
-                  <Text style={activeTab === "group" ? styles.tabTextActive : styles.tabText}>
-                    グループ
+                  <Text style={activeTab === "nook" ? styles.tabTextActive : styles.tabText}>
+                    Nook
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -470,25 +470,25 @@ export default function ProfileScreen() {
                   ? "下書きはありません"
                   : activeTab === "private"
                   ? "非公開の投稿はありません"
-                  : "参加しているグループはありません"}
+                  : "参加しているNookはありません"}
               </Text>
             </View>
           }
           renderItem={({ item }) => {
-            if (activeTab === "group") {
+            if (activeTab === "nook") {
               const isOwner = item.ownerEmail === auth.currentUser?.email;
-              const unreadCount = groupUnreadCounts[item.id] || 0;
+              const unreadCount = nookUnreadCounts[item.id] || 0;
               return (
                 <TouchableOpacity
                   style={styles.groupCard}
-                  onPress={() => router.push({ pathname: "/group/[id]", params: { id: item.id } })}
+                  onPress={() => router.push({ pathname: "/nook/[id]", params: { id: item.id } })}
                 >
                   <View style={styles.groupCardIconWrapper}>
                     <MaterialIcons name="groups" size={22} color="#bbb" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.groupCardName} numberOfLines={1}>
-                      {item.name || "無題のグループ"}
+                      {item.name || "無題のNook"}
                     </Text>
                     <Text style={unreadCount > 0 ? styles.groupCardMetaUnread : styles.groupCardMeta}>
                       {unreadCount > 0 ? `未読メッセージ ${unreadCount}件` : "未読メッセージ なし"}
@@ -497,7 +497,7 @@ export default function ProfileScreen() {
                   {isOwner && (
                     <TouchableOpacity
                       style={styles.groupCardManageButton}
-                      onPress={() => router.push({ pathname: "/group/[id]/manage", params: { id: item.id } })}
+                      onPress={() => router.push({ pathname: "/nook/[id]/manage", params: { id: item.id } })}
                     >
                       <Text style={styles.groupCardManageButtonText}>管理</Text>
                     </TouchableOpacity>

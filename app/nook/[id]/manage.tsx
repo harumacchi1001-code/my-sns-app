@@ -1,45 +1,49 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    DocumentData,
-    increment,
-    onSnapshot,
-    query,
-    serverTimestamp,
-    setDoc,
-    updateDoc,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  DocumentData,
+  getDocs,
+  increment,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../../firebaseConfig";
 type MemberItem = DocumentData & { id: string };
 type RequestItem = DocumentData & { id: string };
-export default function GroupManageScreen() {
+export default function NookManageScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [group, setGroup] = useState<DocumentData | null>(null);
+  const [nook, setNook] = useState<DocumentData | null>(null);
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [limitRequestCount, setLimitRequestCount] = useState(0);
+  const [newLimitText, setNewLimitText] = useState("");
   const [loading, setLoading] = useState(true);
   const myUid = auth.currentUser?.uid;
   useEffect(() => {
     if (!id) return;
-    const unsubscribe = onSnapshot(doc(db, "groups", id), (docSnap) => {
+    const unsubscribe = onSnapshot(doc(db, "nooks", id), (docSnap) => {
       if (docSnap.exists()) {
-        setGroup({ id: docSnap.id, ...docSnap.data() });
+        setNook({ id: docSnap.id, ...docSnap.data() });
       }
       setLoading(false);
     });
@@ -47,7 +51,7 @@ export default function GroupManageScreen() {
   }, [id]);
   useEffect(() => {
     if (!id) return;
-    const q = query(collection(db, "groups", id, "members"));
+    const q = query(collection(db, "nooks", id, "members"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as MemberItem[];
       setMembers(data);
@@ -56,10 +60,18 @@ export default function GroupManageScreen() {
   }, [id]);
   useEffect(() => {
     if (!id) return;
-    const q = query(collection(db, "groups", id, "joinRequests"));
+    const q = query(collection(db, "nooks", id, "joinRequests"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as RequestItem[];
       setRequests(data);
+    });
+    return unsubscribe;
+  }, [id]);
+  useEffect(() => {
+    if (!id) return;
+    const q = query(collection(db, "nooks", id, "limitIncreaseRequests"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setLimitRequestCount(snapshot.size);
     });
     return unsubscribe;
   }, [id]);
@@ -68,21 +80,21 @@ export default function GroupManageScreen() {
   const isOwnerOrAdmin = myMembership?.role === "owner" || myMembership?.role === "admin";
   const handleApprove = async (request: RequestItem) => {
     if (!id) return;
-    await setDoc(doc(db, "groups", id, "members", request.id), {
+    await setDoc(doc(db, "nooks", id, "members", request.id), {
       email: request.email,
       role: "member",
       joinedAt: new Date(),
     });
-    await deleteDoc(doc(db, "groups", id, "joinRequests", request.id));
-    await updateDoc(doc(db, "groups", id), { memberCount: increment(1) });
+    await deleteDoc(doc(db, "nooks", id, "joinRequests", request.id));
+    await updateDoc(doc(db, "nooks", id), { memberCount: increment(1) });
     // ===== 申請者に、承認されたことを、通知する =====
     try {
       await addDoc(collection(db, "notifications"), {
         toUserEmail: request.email,
         fromUserEmail: auth.currentUser?.email,
-        type: "groupApproved",
-        groupId: id,
-        groupName: group?.name || "グループ",
+        type: "nookApproved",
+        nookId: id,
+        nookName: nook?.name || "Nook",
         read: false,
         createdAt: serverTimestamp(),
       });
@@ -92,7 +104,7 @@ export default function GroupManageScreen() {
   };
   const handleReject = async (request: RequestItem) => {
     if (!id) return;
-    await deleteDoc(doc(db, "groups", id, "joinRequests", request.id));
+    await deleteDoc(doc(db, "nooks", id, "joinRequests", request.id));
   };
   const handleRemoveMember = async (member: MemberItem) => {
     if (!id) return;
@@ -101,24 +113,54 @@ export default function GroupManageScreen() {
       return;
     }
     if (Platform.OS === "web") {
-      const confirmed = window.confirm(`${member.email}を、グループから、削除しますか？`);
+      const confirmed = window.confirm(`${member.email}を、Nookから、削除しますか？`);
       if (!confirmed) return;
     }
-    await deleteDoc(doc(db, "groups", id, "members", member.id));
-    await updateDoc(doc(db, "groups", id), { memberCount: increment(-1) });
+    await deleteDoc(doc(db, "nooks", id, "members", member.id));
+    await updateDoc(doc(db, "nooks", id), { memberCount: increment(-1) });
   };
   const handleToggleAdmin = async (member: MemberItem) => {
     if (!id) return;
     const newRole = member.role === "admin" ? "member" : "admin";
-    await updateDoc(doc(db, "groups", id, "members", member.id), { role: newRole });
+    await updateDoc(doc(db, "nooks", id, "members", member.id), { role: newRole });
   };
-  const handleDeleteGroup = async () => {
+  const handleUpdateLimit = async () => {
     if (!id) return;
+    const parsed = parseInt(newLimitText, 10);
+    if (!parsed || parsed < 1 || parsed > 500) {
+      alert("定員は、1〜500の、範囲で、入力してください");
+      return;
+    }
+    if (parsed < (nook?.memberCount || 0)) {
+      alert("現在の、メンバー数より、少ない、定員には、できません");
+      return;
+    }
+    await updateDoc(doc(db, "nooks", id), { memberLimit: parsed });
+    // ===== 定員を、更新したら、それまでの、増加リクエストは、役目を終えたとみなし、削除する =====
+    await clearLimitIncreaseRequests();
+    setNewLimitText("");
+    alert("定員を、更新しました");
+  };
+  // ===== 定員数の、増加リクエストを、すべて、削除する（更新時の、自動リセット、または、手動での確認済み処理、どちらからも呼ばれる） =====
+  const clearLimitIncreaseRequests = async () => {
+    if (!id) return;
+    const snapshot = await getDocs(collection(db, "nooks", id, "limitIncreaseRequests"));
+    await Promise.all(snapshot.docs.map((docSnap) => deleteDoc(docSnap.ref)));
+  };
+  const handleMarkLimitRequestsAsChecked = async () => {
     if (Platform.OS === "web") {
-      const confirmed = window.confirm("このグループを、削除しますか？この操作は、取り消せません。");
+      const confirmed = window.confirm("定員数の、増加リクエストを、確認済みにしますか？");
       if (!confirmed) return;
     }
-    await deleteDoc(doc(db, "groups", id));
+    await clearLimitIncreaseRequests();
+  };
+  const handleDeleteNook = async () => {
+    if (!id) return;
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm("このNookを、削除しますか？この操作は、取り消せません。");
+      if (!confirmed) return;
+    }
+    await deleteDoc(doc(db, "nooks", id));
     router.replace("/(tabs)/explore");
   };
   if (loading) {
@@ -144,7 +186,7 @@ export default function GroupManageScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>グループの管理</Text>
+          <Text style={styles.headerTitle}>Nookの管理</Text>
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -167,6 +209,37 @@ export default function GroupManageScreen() {
               ))}
             </>
           )}
+          {/* ===== 定員の、管理 ===== */}
+          <Text style={styles.sectionTitle}>定員</Text>
+          <View style={styles.limitInfoRow}>
+            <Text style={styles.limitInfoText}>
+              現在：{nook?.memberCount || 0}人 / {nook?.memberLimit || "未設定"}人
+            </Text>
+            {limitRequestCount > 0 && (
+              <View style={styles.limitRequestRow}>
+                <View style={styles.limitRequestBadge}>
+                  <Text style={styles.limitRequestBadgeText}>
+                    定員数の増加リクエスト {limitRequestCount}件
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={handleMarkLimitRequestsAsChecked}>
+                  <Text style={styles.limitRequestCheckedText}>確認済みにする</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+          <View style={styles.limitEditRow}>
+            <TextInput
+              value={newLimitText}
+              onChangeText={setNewLimitText}
+              placeholder="新しい定員（1〜500）"
+              keyboardType="numeric"
+              style={styles.limitInput}
+            />
+            <TouchableOpacity style={styles.limitUpdateButton} onPress={handleUpdateLimit}>
+              <Text style={styles.limitUpdateButtonText}>更新</Text>
+            </TouchableOpacity>
+          </View>
           {/* ===== メンバー一覧 ===== */}
           <Text style={styles.sectionTitle}>メンバー（{members.length}人）</Text>
           {members.map((member) => (
@@ -191,10 +264,10 @@ export default function GroupManageScreen() {
               )}
             </View>
           ))}
-          {/* ===== オーナーのみ：グループの削除 ===== */}
+          {/* ===== オーナーのみ：Nookの削除 ===== */}
           {myMembership?.role === "owner" && (
-            <TouchableOpacity style={styles.deleteGroupButton} onPress={handleDeleteGroup}>
-              <Text style={styles.deleteGroupButtonText}>グループを削除する</Text>
+            <TouchableOpacity style={styles.deleteNookButton} onPress={handleDeleteNook}>
+              <Text style={styles.deleteNookButtonText}>Nookを削除する</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -250,6 +323,60 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 16,
     marginBottom: 8,
+  },
+  limitInfoRow: {
+    marginBottom: 10,
+  },
+  limitInfoText: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 6,
+  },
+  limitRequestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  limitRequestBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#fff8e6",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  limitRequestCheckedText: {
+    fontSize: 12,
+    color: "#4a90e2",
+  },
+  limitRequestBadgeText: {
+    fontSize: 12,
+    color: "#8a6d1a",
+    fontWeight: "600",
+  },
+  limitEditRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
+  limitInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+  limitUpdateButton: {
+    backgroundColor: "#222",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    justifyContent: "center",
+  },
+  limitUpdateButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
   },
   requestRow: {
     flexDirection: "row",
@@ -317,7 +444,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#333",
   },
-  deleteGroupButton: {
+  deleteNookButton: {
     marginTop: 30,
     borderWidth: 1,
     borderColor: "#e74c3c",
@@ -325,7 +452,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: "center",
   },
-  deleteGroupButtonText: {
+  deleteNookButtonText: {
     color: "#e74c3c",
     fontWeight: "600",
     fontSize: 14,
