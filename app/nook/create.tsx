@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import WebSidebar from "../../components/WebSidebar";
 import { GENRE_TEMPLATES } from "../../constants/postTemplates";
 import { auth, db, storage } from "../../firebaseConfig";
 const isWeb = Platform.OS === "web";
@@ -25,6 +26,7 @@ const MEMBER_LIMIT_OPTIONS = [10, 30, 50, 100, 150, 200, 300, 400, 500];
 const MAX_NOOKS_PER_ACCOUNT = 3;
 export default function NookCreateScreen() {
   const router = useRouter();
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [genreId, setGenreId] = useState<string | null>(null);
@@ -128,7 +130,8 @@ export default function NookCreateScreen() {
   };
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.pageWrapper}>
+      {isWeb && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
+      <View style={[styles.pageWrapper, isWeb && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>

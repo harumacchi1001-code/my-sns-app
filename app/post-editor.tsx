@@ -91,6 +91,7 @@ export default function PostScreen() {
   const [myNooks, setMyNooks] = useState<{ id: string; name: string }[]>([]);
   const [selectedNookId, setSelectedNookId] = useState<string | null>(null);
   const [nookMenuVisible, setNookMenuVisible] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   // ===== 自由入力モードで、選ばれている、配色の、実際のデータ =====
   const freeWriteTheme = freeWriteThemeId ? getColorTheme(freeWriteThemeId as ColorThemeId) : null;
   // ===== テンプレート使用時、配色が、まだ、指定されていなければ、自由入力モードの、配色（初期値）を、代わりに、使う =====
@@ -557,7 +558,7 @@ export default function PostScreen() {
   );
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {isWeb && <WebSidebar />}
+      {isWeb && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
       {/* ===== Web版・広い画面のときだけ、右側に表示される、プレビューパネル ===== */}
       <PostPreviewPanel
         thumbnail={thumbnail || null}
@@ -567,7 +568,7 @@ export default function PostScreen() {
         bodyHtml={previewBodyHtml}
         theme={effectiveTemplateTheme}
       />
-      <View style={[styles.pageWrapper, isWeb && { paddingLeft: 64 }]}>
+      <View style={[styles.pageWrapper, isWeb && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleDeleteAll}>
             <Text style={styles.deleteLabel}>{t("post.deleteButton")}</Text>

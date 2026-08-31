@@ -1,5 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import {
     Platform,
     ScrollView,
@@ -19,6 +20,7 @@ import {
 export default function TemplatePreviewScreen() {
   const router = useRouter();
   const { genreId, layoutId } = useLocalSearchParams<{ genreId: string; layoutId: "A" | "B" | "C" }>();
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const genre = getGenreTemplate(genreId || "");
   const theme = getColorTheme("simple");
   if (!genre || !layoutId) {
@@ -165,8 +167,8 @@ export default function TemplatePreviewScreen() {
   };
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {Platform.OS === "web" && <WebSidebar />}
-      <View style={[styles.pageWrapper, Platform.OS === "web" && { paddingLeft: 64 }]}>
+      {Platform.OS === "web" && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
+      <View style={[styles.pageWrapper, Platform.OS === "web" && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
             {genre.label}・{layout.name}

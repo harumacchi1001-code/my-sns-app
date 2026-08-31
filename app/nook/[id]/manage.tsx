@@ -26,12 +26,14 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import WebSidebar from "../../../components/WebSidebar";
 import { auth, db } from "../../../firebaseConfig";
 type MemberItem = DocumentData & { id: string };
 type RequestItem = DocumentData & { id: string };
 export default function NookManageScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [nook, setNook] = useState<DocumentData | null>(null);
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [requests, setRequests] = useState<RequestItem[]>([]);
@@ -181,7 +183,8 @@ export default function NookManageScreen() {
   }
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.pageWrapper}>
+      {Platform.OS === "web" && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
+      <View style={[styles.pageWrapper, Platform.OS === "web" && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>

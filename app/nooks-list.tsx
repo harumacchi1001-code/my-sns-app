@@ -20,6 +20,7 @@ type NookItem = DocumentData & { id: string };
 const isWeb = Platform.OS === "web";
 export default function NooksListScreen() {
   const router = useRouter();
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [nooks, setNooks] = useState<NookItem[]>([]);
   const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -50,8 +51,8 @@ export default function NooksListScreen() {
   }
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {isWeb && <WebSidebar />}
-      <View style={[styles.pageWrapper, isWeb && { paddingLeft: 64 }]}>
+      {isWeb && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
+      <View style={[styles.pageWrapper, isWeb && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>
