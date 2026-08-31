@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 50,
   },
   // ===== 検索バー・発見アイコンのスタイル =====
   searchBarRow: {
