@@ -36,7 +36,7 @@ const HOME_SUB_ITEMS = [
   { key: "recommended", label: "おすすめ" },
   { key: "following", label: "フォロー中" },
 ];
-export default function WebSidebar() {
+export default function WebSidebar({ onExpandChange }: { onExpandChange?: (expanded: boolean) => void } = {}) {
   const { width } = useWindowDimensions();
   const pathname = usePathname();
   const router = useRouter();
@@ -66,6 +66,7 @@ export default function WebSidebar() {
   }
   const handleMouseEnter = () => {
     setIsExpanded(true);
+    onExpandChange?.(true);
     Animated.timing(widthAnim, {
       toValue: SIDEBAR_EXPANDED_WIDTH,
       duration: 200,
@@ -88,7 +89,10 @@ export default function WebSidebar() {
       toValue: 0,
       duration: 120,
       useNativeDriver: false,
-    }).start(() => setIsExpanded(false));
+    }).start(() => {
+      setIsExpanded(false);
+      onExpandChange?.(false);
+    });
     setHoveredItemName(null);
     setShowHomeSubMenu(false);
   };

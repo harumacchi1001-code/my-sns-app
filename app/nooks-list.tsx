@@ -90,30 +90,40 @@ export default function NooksListScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.nookRow}
-              onPress={() => router.push({ pathname: "/nook/[id]", params: { id: item.id } })}
-            >
-              <View style={styles.nookIconWrapper}>
-                {item.iconUrl ? (
-                  <Image source={{ uri: item.iconUrl }} style={styles.nookIcon} />
-                ) : (
-                  <MaterialIcons name="groups" size={22} color="#bbb" />
-                )}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.nookRowName} numberOfLines={1}>
-                  {item.name || "無題のNook"}
-                </Text>
-                <Text style={styles.nookRowMeta} numberOfLines={1}>
-                  メンバー {item.memberCount || 0}人
-                  {item.description ? ` ・ ${item.description}` : ""}
-                </Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={20} color="#ccc" />
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const isFull = !!(item.memberLimit && (item.memberCount || 0) >= item.memberLimit);
+            return (
+              <TouchableOpacity
+                style={styles.nookRow}
+                onPress={() => router.push({ pathname: "/nook/[id]", params: { id: item.id } })}
+              >
+                <View style={styles.nookIconWrapper}>
+                  {item.iconUrl ? (
+                    <Image source={{ uri: item.iconUrl }} style={styles.nookIcon} />
+                  ) : (
+                    <MaterialIcons name="groups" size={22} color="#bbb" />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.nookRowName} numberOfLines={1}>
+                      {item.name || "無題のNook"}
+                    </Text>
+                    {isFull && (
+                      <View style={styles.fullBadge}>
+                        <Text style={styles.fullBadgeText}>満員</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.nookRowMeta} numberOfLines={1}>
+                    メンバー {item.memberCount || 0}人{item.memberLimit ? ` / ${item.memberLimit}人` : ""}
+                    {item.description ? ` ・ ${item.description}` : ""}
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color="#ccc" />
+              </TouchableOpacity>
+            );
+          }}
         />
       </View>
     </SafeAreaView>
@@ -240,5 +250,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#999",
     marginTop: 2,
+  },
+  fullBadge: {
+    backgroundColor: "#fdecea",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  fullBadgeText: {
+    fontSize: 10,
+    color: "#c0392b",
+    fontWeight: "600",
   },
 });
