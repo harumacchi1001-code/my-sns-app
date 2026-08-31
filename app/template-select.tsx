@@ -1,5 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
     Platform,
     ScrollView,
@@ -94,6 +95,7 @@ function MiniLayoutPreview({ genreId, layout }: { genreId: string; layout: Templ
 }
 export default function TemplateSelectScreen() {
   const router = useRouter();
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   // ===== 「自由に書く」を選んだら、これまでどおりの投稿作成画面へ =====
   const handleFreeWrite = () => {
     router.push("/post-editor");
@@ -104,8 +106,8 @@ export default function TemplateSelectScreen() {
   };
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {Platform.OS === "web" && <WebSidebar />}
-      <View style={[styles.pageWrapper, Platform.OS === "web" && { paddingLeft: 64 }]}>
+      {Platform.OS === "web" && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
+      <View style={[styles.pageWrapper, Platform.OS === "web" && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>

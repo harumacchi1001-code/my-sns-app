@@ -36,6 +36,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import MediaLightbox from "../../../components/MediaLightbox";
 import StampFrame from "../../../components/StampFrame";
+import WebSidebar from "../../../components/WebSidebar";
 import { auth, db, storage } from "../../../firebaseConfig";
 type MessageItem = DocumentData & { id: string };
 const isWeb = Platform.OS === "web";
@@ -50,6 +51,7 @@ function MessageVideo({ uri, style }: { uri: string; style: any }) {
 export default function NookChatScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [nook, setNook] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -353,7 +355,8 @@ export default function NookChatScreen() {
   if (!isMember) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
-        <View style={styles.pageWrapper}>
+        {isWeb && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
+        <View style={[styles.pageWrapper, isWeb && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()}>
               <Text style={styles.backText}>← 戻る</Text>
@@ -408,7 +411,8 @@ export default function NookChatScreen() {
   }
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.pageWrapper}>
+      {isWeb && <WebSidebar onExpandChange={setIsSidebarExpanded} />}
+      <View style={[styles.pageWrapper, isWeb && { paddingLeft: isSidebarExpanded ? 200 : 64 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>← 戻る</Text>
