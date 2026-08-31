@@ -10,7 +10,7 @@ const MOBILE_BREAKPOINT = 768;
 // ===== ここまでWeb版専用 =====
 // ===== サイドバーの、折りたたみ時・展開時の幅と同じ値。中身と重ならないよう、左に余白として使う =====
 const SIDEBAR_COLLAPSED_WIDTH = 64;
-const SIDEBAR_EXPANDED_TOTAL_WIDTH = 264;
+const SIDEBAR_EXPANDED_TOTAL_WIDTH = 200;
 
 // ===== ここからWeb版専用：タブの名前とアイコンの対応（下タブバー用） =====
 const MOBILE_TAB_ITEMS = [
