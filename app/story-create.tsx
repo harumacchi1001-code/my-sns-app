@@ -7,10 +7,12 @@ import { useState } from "react";
 import {
     ActivityIndicator,
     Image,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -23,6 +25,29 @@ export default function StoryCreateScreen() {
   const [items, setItems] = useState<PickedItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
+  // ===== 写真・動画の上に重ねる、テキスト（すべての投稿に、共通で付く） =====
+  const [overlayText, setOverlayText] = useState("");
+  const [textInputVisible, setTextInputVisible] = useState(false);
+  // ===== 写真・動画の上に重ねる、スタンプ（複数、配置できる） =====
+  const [overlayStamps, setOverlayStamps] = useState<string[]>([]);
+  const [stampPickerVisible, setStampPickerVisible] = useState(false);
+  const STAMP_EMOJIS = ["😂", "😍", "😭", "😮", "😡", "🥳", "❤️", "🔥", "👏", "💯", "✨", "🎉", "😴", "🤔", "👀", "🙏"];
+  // ===== 各、スタンプの、プレビュー上の、配置位置（あらかじめ、決めた、パターンを、順番に使う） =====
+  const STAMP_POSITIONS: { top?: string; bottom?: string; left?: string; right?: string }[] = [
+    { top: "15%", left: "15%" },
+    { top: "15%", right: "15%" },
+    { bottom: "30%", left: "15%" },
+    { bottom: "30%", right: "15%" },
+    { top: "35%", left: "40%" },
+    { top: "55%", left: "10%" },
+  ];
+  const addStamp = (emoji: string) => {
+    setOverlayStamps((prev) => (prev.length >= STAMP_POSITIONS.length ? prev : [...prev, emoji]));
+    setStampPickerVisible(false);
+  };
+  const removeStamp = (index: number) => {
+    setOverlayStamps((prev) => prev.filter((_, i) => i !== index));
+  };
   const pickMedia = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
@@ -75,6 +100,8 @@ export default function StoryCreateScreen() {
           mediaType: item.type,
           createdAt: serverTimestamp(),
           viewedBy: [],
+          overlayText: overlayText.trim() || null,
+          overlayStamps: overlayStamps.length > 0 ? overlayStamps : null,
         });
         setUploadProgress({ done: i + 1, total: items.length });
       }
@@ -115,6 +142,31 @@ export default function StoryCreateScreen() {
                   <Text style={styles.videoPlaceholderText}>動画（1枚目のプレビュー）</Text>
                 </View>
               )}
+              {/* ===== 重ねる、テキストの、プレビュー（中央、固定） ===== */}
+              {overlayText ? (
+                <TouchableOpacity style={styles.overlayTextWrapper} onPress={() => setTextInputVisible(true)}>
+                  <Text style={styles.overlayTextPreview}>{overlayText}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.addTextButton} onPress={() => setTextInputVisible(true)}>
+                  <MaterialIcons name="text-fields" size={20} color="#fff" />
+                  <Text style={styles.addTextButtonLabel}>テキストを追加</Text>
+                </TouchableOpacity>
+              )}
+              {/* ===== 配置された、スタンプの、プレビュー（タップで、削除） ===== */}
+              {overlayStamps.map((emoji, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.stampWrapper, STAMP_POSITIONS[index] as any]}
+                  onPress={() => removeStamp(index)}
+                >
+                  <Text style={styles.stampText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.addStampButton} onPress={() => setStampPickerVisible(true)}>
+                <Text style={{ fontSize: 18 }}>😊</Text>
+                <Text style={styles.addTextButtonLabel}>スタンプ</Text>
+              </TouchableOpacity>
             </View>
             <Text style={styles.orderHint}>
               {items.length}枚、選択中（この順番で、投稿されます）
@@ -151,6 +203,57 @@ export default function StoryCreateScreen() {
             </Text>
           </View>
         )}
+        {/* ===== スタンプ候補、選択の、モーダル ===== */}
+        <Modal visible={stampPickerVisible} transparent animationType="fade" onRequestClose={() => setStampPickerVisible(false)}>
+          <TouchableOpacity
+            style={styles.textModalOverlay}
+            activeOpacity={1}
+            onPress={() => setStampPickerVisible(false)}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.stampPickerCard}>
+              <Text style={styles.stampPickerTitle}>スタンプを選ぶ</Text>
+              <View style={styles.stampPickerGrid}>
+                {STAMP_EMOJIS.map((emoji) => (
+                  <TouchableOpacity key={emoji} style={styles.stampPickerItem} onPress={() => addStamp(emoji)}>
+                    <Text style={{ fontSize: 28 }}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+        {/* ===== テキスト入力用の、モーダル ===== */}
+        <Modal visible={textInputVisible} transparent animationType="fade" onRequestClose={() => setTextInputVisible(false)}>
+          <View style={styles.textModalOverlay}>
+            <View style={styles.textModalCard}>
+              <TextInput
+                value={overlayText}
+                onChangeText={setOverlayText}
+                placeholder="テキストを入力"
+                placeholderTextColor="#999"
+                style={styles.textModalInput}
+                multiline
+                autoFocus
+              />
+              <View style={styles.textModalButtonRow}>
+                {overlayText.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.textModalClearButton}
+                    onPress={() => {
+                      setOverlayText("");
+                      setTextInputVisible(false);
+                    }}
+                  >
+                    <Text style={styles.textModalClearButtonText}>削除</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.textModalDoneButton} onPress={() => setTextInputVisible(false)}>
+                  <Text style={styles.textModalDoneButtonText}>完了</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -298,5 +401,123 @@ const styles = StyleSheet.create({
   uploadingText: {
     color: "#fff",
     fontSize: 13,
+  },
+  overlayTextWrapper: {
+    position: "absolute",
+    top: "45%",
+    left: 20,
+    right: 20,
+    alignItems: "center",
+  },
+  overlayTextPreview: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "700",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  addTextButton: {
+    position: "absolute",
+    bottom: 16,
+    left: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  addTextButtonLabel: {
+    color: "#fff",
+    fontSize: 13,
+  },
+  addStampButton: {
+    position: "absolute",
+    bottom: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  stampWrapper: {
+    position: "absolute",
+  },
+  stampText: {
+    fontSize: 40,
+  },
+  stampPickerCard: {
+    backgroundColor: "#1c1c1e",
+    borderRadius: 14,
+    padding: 20,
+    width: "85%",
+    maxWidth: 340,
+  },
+  stampPickerTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 14,
+    textAlign: "center",
+  },
+  stampPickerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 14,
+  },
+  stampPickerItem: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  textModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  textModalCard: {
+    backgroundColor: "#1c1c1e",
+    borderRadius: 14,
+    padding: 16,
+  },
+  textModalInput: {
+    color: "#fff",
+    fontSize: 20,
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  textModalButtonRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 16,
+    marginTop: 12,
+  },
+  textModalClearButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  textModalClearButtonText: {
+    color: "#e74c3c",
+    fontSize: 14,
+  },
+  textModalDoneButton: {
+    backgroundColor: "#4a90e2",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  textModalDoneButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

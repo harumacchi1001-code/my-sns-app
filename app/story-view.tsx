@@ -16,6 +16,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Animated,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -30,6 +31,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../firebaseConfig";
 const STORY_DURATION_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// ===== 投稿画面と、同じ、スタンプの、配置パターン =====
+const STAMP_POSITIONS: { top?: string; bottom?: string; left?: string; right?: string }[] = [
+  { top: "15%", left: "15%" },
+  { top: "15%", right: "15%" },
+  { bottom: "30%", left: "15%" },
+  { bottom: "30%", right: "15%" },
+  { top: "35%", left: "40%" },
+  { top: "55%", left: "10%" },
+];
 export default function StoryViewScreen() {
   const router = useRouter();
   const { authorId } = useLocalSearchParams<{ authorId: string }>();
@@ -43,6 +53,9 @@ export default function StoryViewScreen() {
   // ===== 返信の、入力・送信中の状態 =====
   const [replyText, setReplyText] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
+  // ===== 絵文字リアクションの、候補、選択、状態 =====
+  const [reactionPickerVisible, setReactionPickerVisible] = useState(false);
+  const REACTION_EMOJIS = ["❤️", "😂", "😮", "😢", "👍", "🔥"];
   useEffect(() => {
     const loadStories = async () => {
       if (!authorId) return;
@@ -154,6 +167,32 @@ export default function StoryViewScreen() {
     router.push({ pathname: "/story-viewers", params: { storyId: currentStory.id } });
   };
   const isMyStory = authorId === auth.currentUser?.uid;
+  // ===== リアクションの、飛び出す、エフェクト、用の状態 =====
+  const [floatingEmoji, setFloatingEmoji] = useState<string | null>(null);
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const playReactionEffect = (emoji: string) => {
+    setFloatingEmoji(emoji);
+    floatAnim.setValue(0);
+    Animated.timing(floatAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start(() => setFloatingEmoji(null));
+  };
+  // ===== ストーリーに、絵文字リアクションを、送る =====
+  const sendReaction = async (emoji: string) => {
+    if (!currentStory) return;
+    const myEmail = auth.currentUser?.email;
+    if (!myEmail) return;
+    playReactionEffect(emoji);
+    const reactions: Record<string, string[]> = { ...(currentStory.reactions || {}) };
+    const list: string[] = reactions[emoji] || [];
+    if (!list.includes(myEmail)) {
+      reactions[emoji] = [...list, myEmail];
+      await updateDoc(doc(db, "stories", currentStory.id), { reactions });
+    }
+    setReactionPickerVisible(false);
+  };
   // ===== ストーリーへの、返信を、送信する（既存の個人チャットがあれば、そこに送り、なければ新しく作る） =====
   const handleSendReply = async () => {
     if (!replyText.trim() || !currentStory || !author?.email) return;
@@ -278,24 +317,55 @@ export default function StoryViewScreen() {
               nativeControls={false}
             />
           )}
+          {/* ===== 投稿時に、重ねられた、テキスト（中央、固定） ===== */}
+          {currentStory.overlayText && (
+            <View style={styles.overlayTextWrapper} pointerEvents="none">
+              <Text style={styles.overlayTextView}>{currentStory.overlayText}</Text>
+            </View>
+          )}
+          {/* ===== 投稿時に、配置された、スタンプ ===== */}
+          {(currentStory.overlayStamps || []).map((emoji: string, index: number) => (
+            <View key={index} style={[styles.stampWrapper, STAMP_POSITIONS[index] as any]} pointerEvents="none">
+              <Text style={styles.stampTextView}>{emoji}</Text>
+            </View>
+          ))}
           {/* 左右のタップゾーン（返信欄がある分、下側は、避けて配置） */}
           <View style={styles.tapZoneRow} pointerEvents="box-none">
             <TouchableOpacity style={styles.tapZone} activeOpacity={1} onPress={goPrev} />
             <TouchableOpacity style={styles.tapZone} activeOpacity={1} onPress={goNext} />
           </View>
         </View>
-        {/* 自分のストーリーのときだけ、閲覧者ボタンを表示 */}
+        {/* 自分のストーリーのときだけ、閲覧者ボタン＋受け取った、リアクションの、集計を、表示 */}
         {isMyStory && (
-          <TouchableOpacity style={styles.viewersButton} onPress={goToViewersList}>
-            <MaterialIcons name="visibility" size={18} color="#fff" />
-            <Text style={styles.viewersButtonText}>
-              {(currentStory.viewedBy || []).length}人が閲覧
-            </Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.viewersButton} onPress={goToViewersList}>
+              <MaterialIcons name="visibility" size={18} color="#fff" />
+              <Text style={styles.viewersButtonText}>
+                {(currentStory.viewedBy || []).length}人が閲覧
+              </Text>
+            </TouchableOpacity>
+            {Object.keys(currentStory.reactions || {}).length > 0 && (
+              <View style={styles.myReactionSummaryRow}>
+                {Object.entries(currentStory.reactions || {}).map(([emoji, list]: [string, any]) => (
+                  <View key={emoji} style={styles.myReactionSummaryPill}>
+                    <Text style={styles.myReactionSummaryText}>
+                      {emoji} {list.length}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
         )}
-        {/* ===== 自分のストーリーでなければ、返信の入力欄を表示 ===== */}
+        {/* ===== 自分のストーリーでなければ、リアクションボタン＋返信の入力欄を表示 ===== */}
         {!isMyStory && (
           <View style={styles.replyRow}>
+            <TouchableOpacity
+              style={styles.reactionButton}
+              onPress={() => setReactionPickerVisible((v) => !v)}
+            >
+              <Text style={{ fontSize: 20 }}>🙂</Text>
+            </TouchableOpacity>
             <TextInput
               value={replyText}
               onChangeText={setReplyText}
@@ -318,6 +388,47 @@ export default function StoryViewScreen() {
               )}
             </TouchableOpacity>
           </View>
+        )}
+        {/* ===== 絵文字リアクションの、候補、選択、パネル ===== */}
+        {reactionPickerVisible && !isMyStory && (
+          <View style={styles.reactionPickerRow}>
+            {REACTION_EMOJIS.map((emoji) => (
+              <TouchableOpacity key={emoji} style={styles.reactionPickerButton} onPress={() => sendReaction(emoji)}>
+                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {/* ===== リアクションを送った、瞬間に、大きく飛び出す、エフェクト ===== */}
+        {floatingEmoji && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.floatingEmojiWrapper,
+              {
+                opacity: floatAnim.interpolate({
+                  inputRange: [0, 0.15, 0.7, 1],
+                  outputRange: [0, 1, 1, 0],
+                }),
+                transform: [
+                  {
+                    translateY: floatAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -120],
+                    }),
+                  },
+                  {
+                    scale: floatAnim.interpolate({
+                      inputRange: [0, 0.2, 1],
+                      outputRange: [0.3, 1.3, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.floatingEmojiText}>{floatingEmoji}</Text>
+          </Animated.View>
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -435,6 +546,71 @@ const styles = StyleSheet.create({
   viewersButtonText: {
     color: "#fff",
     fontSize: 13,
+  },
+  myReactionSummaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+    paddingBottom: 10,
+  },
+  myReactionSummaryPill: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  myReactionSummaryText: {
+    color: "#fff",
+    fontSize: 13,
+  },
+  reactionButton: {
+    width: 36,
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  reactionPickerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 16,
+    paddingVertical: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  reactionPickerButton: {
+    paddingHorizontal: 4,
+  },
+  floatingEmojiWrapper: {
+    position: "absolute",
+    top: "40%",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  floatingEmojiText: {
+    fontSize: 80,
+  },
+  overlayTextWrapper: {
+    position: "absolute",
+    top: "45%",
+    left: 20,
+    right: 20,
+    alignItems: "center",
+  },
+  overlayTextView: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "700",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  stampWrapper: {
+    position: "absolute",
+  },
+  stampTextView: {
+    fontSize: 40,
   },
   replyRow: {
     flexDirection: "row",
