@@ -934,12 +934,32 @@ function ChatDetailPane({
                   >
                     {item.replyTo && (
                       <View style={styles.replyQuoteBox}>
-                        <Text style={styles.replyQuoteSender}>
-                          {getSenderDisplayName(item.replyTo.senderEmail)}
-                        </Text>
-                        <Text style={styles.replyQuoteText} numberOfLines={1}>
-                          {item.replyTo.text}
-                        </Text>
+                        {item.replyTo.storyMediaUrl && (
+                          <TouchableOpacity
+                            onPress={() =>
+                              openLightbox(item.replyTo.storyMediaUrl, item.replyTo.storyMediaType === "video")
+                            }
+                          >
+                            {item.replyTo.storyMediaType === "video" ? (
+                              <View style={styles.replyStoryThumbnailPlaceholder}>
+                                <Text style={{ fontSize: 12 }}>🎬</Text>
+                              </View>
+                            ) : (
+                              <Image
+                                source={{ uri: item.replyTo.storyMediaUrl }}
+                                style={styles.replyStoryThumbnail}
+                              />
+                            )}
+                          </TouchableOpacity>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.replyQuoteSender}>
+                            {getSenderDisplayName(item.replyTo.senderEmail)}
+                          </Text>
+                          <Text style={styles.replyQuoteText} numberOfLines={1}>
+                            {item.replyTo.text}
+                          </Text>
+                        </View>
                       </View>
                     )}
                     <Text style={isMine ? styles.myMessageText : styles.otherMessageText}>
@@ -1420,10 +1440,27 @@ const styles = StyleSheet.create({
     color: "#999",
   },
   replyQuoteBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     borderLeftWidth: 3,
     borderLeftColor: "rgba(255,255,255,0.6)",
     paddingLeft: 8,
     marginBottom: 6,
+  },
+  replyStoryThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+    backgroundColor: "#333",
+  },
+  replyStoryThumbnailPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
   },
   replyQuoteSender: {
     fontSize: 11,

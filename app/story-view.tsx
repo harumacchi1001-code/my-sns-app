@@ -1,14 +1,28 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { arrayUnion, collection, doc, DocumentData, getDocs, query, updateDoc, where } from "firebase/firestore";
+import {
+    addDoc,
+    arrayUnion,
+    collection,
+    doc,
+    DocumentData,
+    getDocs,
+    query,
+    serverTimestamp,
+    updateDoc,
+    where
+} from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Image,
+    Keyboard,
+    KeyboardAvoidingView,
     Platform,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -26,6 +40,9 @@ export default function StoryViewScreen() {
   const [progress, setProgress] = useState(0);
   const timerRef = useRef<any>(null);
   const startTimeRef = useRef<number>(Date.now());
+  // ===== 返信の、入力・送信中の状態 =====
+  const [replyText, setReplyText] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
   useEffect(() => {
     const loadStories = async () => {
       if (!authorId) return;
@@ -54,7 +71,6 @@ export default function StoryViewScreen() {
     loadStories();
   }, [authorId]);
   const currentStory = stories[index];
-
   // ===== 動画再生用の、プレーヤーを準備する =====
   // （写真のときは、videoSourceがnullになり、プレーヤーは何もしない）
   const videoSource = currentStory?.mediaType === "video" ? currentStory.mediaUrl : null;
@@ -63,11 +79,13 @@ export default function StoryViewScreen() {
     // Web版のブラウザは、音声付き動画の自動再生を、ブロックすることがあるため、
     // 消音にしてから、自動再生する
     p.muted = true;
-    if (videoSource) {
-      p.play();
-    }
   });
-
+  // ===== ストーリーが切り替わる、たびに、動画の、再生位置をリセットし、確実に、再生を、開始する =====
+  useEffect(() => {
+    if (!videoSource) return;
+    player.currentTime = 0;
+    player.play();
+  }, [videoSource]);
   // ===== 開いたストーリーを、見た記録として残す =====
   useEffect(() => {
     const recordView = async () => {
@@ -82,7 +100,6 @@ export default function StoryViewScreen() {
     };
     recordView();
   }, [currentStory?.id]);
-
   const goNext = () => {
     if (index < stories.length - 1) {
       setIndex((prev) => prev + 1);
@@ -97,58 +114,101 @@ export default function StoryViewScreen() {
       router.back();
     }
   };
-
   // ===== 写真のときだけ、5秒固定の、進み具合バーのタイマーを動かす =====
   useEffect(() => {
     if (!currentStory || currentStory.mediaType === "video") return;
-
     setProgress(0);
     startTimeRef.current = Date.now();
-
     if (timerRef.current) clearInterval(timerRef.current);
-
     timerRef.current = setInterval(() => {
       const elapsed = Date.now() - startTimeRef.current;
       const ratio = Math.min(elapsed / STORY_DURATION_MS, 1);
       setProgress(ratio);
-
       if (ratio >= 1) {
         goNext();
       }
     }, 50);
-
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [index, currentStory?.id, currentStory?.mediaType]);
-
   // ===== 動画のときは、動画自体の再生位置を使って、進み具合バーを動かす =====
   useEffect(() => {
     if (!currentStory || currentStory.mediaType !== "video") return;
-
     setProgress(0);
-
     const endSubscription = player.addListener("playToEnd", () => {
       goNext();
     });
-
     const progressTimer = setInterval(() => {
       if (player.duration > 0) {
         setProgress(Math.min(player.currentTime / player.duration, 1));
       }
     }, 100);
-
     return () => {
       endSubscription.remove();
       clearInterval(progressTimer);
     };
   }, [currentStory?.id, currentStory?.mediaType]);
-
   const goToViewersList = () => {
     if (!currentStory) return;
     router.push({ pathname: "/story-viewers", params: { storyId: currentStory.id } });
   };
   const isMyStory = authorId === auth.currentUser?.uid;
+  // ===== ストーリーへの、返信を、送信する（既存の個人チャットがあれば、そこに送り、なければ新しく作る） =====
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !currentStory || !author?.email) return;
+    const myEmail = auth.currentUser?.email;
+    if (!myEmail) return;
+    setSendingReply(true);
+    try {
+      const q = query(
+        collection(db, "chats"),
+        where("participants", "array-contains", myEmail),
+        where("isGroup", "==", false)
+      );
+      const snapshot = await getDocs(q);
+      const existingChat = snapshot.docs.find((docSnap) => {
+        const participants: string[] = docSnap.data().participants || [];
+        return participants.includes(author.email) && participants.length === 2;
+      });
+      let chatId: string;
+      if (existingChat) {
+        chatId = existingChat.id;
+      } else {
+        const newChat = await addDoc(collection(db, "chats"), {
+          participants: [myEmail, author.email],
+          isGroup: false,
+          groupName: null,
+          lastMessage: "",
+          lastMessageAt: serverTimestamp(),
+        });
+        chatId = newChat.id;
+      }
+      // ===== 「〇〇さんのストーリーに返信」の、引用付きで、メッセージを送る =====
+      const messageText = replyText.trim();
+      await addDoc(collection(db, "chats", chatId, "messages"), {
+        senderEmail: myEmail,
+        text: messageText,
+        readBy: [myEmail],
+        createdAt: new Date(),
+        replyTo: {
+          id: currentStory.id,
+          text: "ストーリーに、返信",
+          senderEmail: author.email,
+          storyMediaUrl: currentStory.mediaUrl,
+          storyMediaType: currentStory.mediaType,
+        },
+      });
+      await updateDoc(doc(db, "chats", chatId), {
+        lastMessage: messageText,
+        lastMessageAt: new Date(),
+      });
+      setReplyText("");
+      Keyboard.dismiss();
+    } finally {
+      setSendingReply(false);
+    }
+  };
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -170,7 +230,7 @@ export default function StoryViewScreen() {
   }
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.pageWrapper}>
+      <KeyboardAvoidingView style={styles.pageWrapper} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {/* 進み具合バー */}
         <View style={styles.progressRow}>
           {stories.map((_, i) => (
@@ -218,7 +278,7 @@ export default function StoryViewScreen() {
               nativeControls={false}
             />
           )}
-          {/* 左右のタップゾーン */}
+          {/* 左右のタップゾーン（返信欄がある分、下側は、避けて配置） */}
           <View style={styles.tapZoneRow} pointerEvents="box-none">
             <TouchableOpacity style={styles.tapZone} activeOpacity={1} onPress={goPrev} />
             <TouchableOpacity style={styles.tapZone} activeOpacity={1} onPress={goNext} />
@@ -233,7 +293,33 @@ export default function StoryViewScreen() {
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+        {/* ===== 自分のストーリーでなければ、返信の入力欄を表示 ===== */}
+        {!isMyStory && (
+          <View style={styles.replyRow}>
+            <TextInput
+              value={replyText}
+              onChangeText={setReplyText}
+              placeholder="返信を送信"
+              placeholderTextColor="rgba(255,255,255,0.5)"
+              style={styles.replyInput}
+              onFocus={() => {
+                if (timerRef.current) clearInterval(timerRef.current);
+              }}
+            />
+            <TouchableOpacity
+              onPress={handleSendReply}
+              disabled={!replyText.trim() || sendingReply}
+              style={styles.replySendButton}
+            >
+              {sendingReply ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <MaterialIcons name="send" size={20} color={replyText.trim() ? "#4a90e2" : "#666"} />
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -349,5 +435,28 @@ const styles = StyleSheet.create({
   viewersButtonText: {
     color: "#fff",
     fontSize: 13,
+  },
+  replyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  replyInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: "#fff",
+    fontSize: 14,
+  },
+  replySendButton: {
+    width: 36,
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
