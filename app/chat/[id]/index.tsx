@@ -1,3 +1,4 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -188,6 +189,43 @@ export default function ChatDetailScreen() {
     } else {
       router.push({ pathname: "/user/[id]", params: { id: userId } });
     }
+  };
+  // ===== 音声・ビデオ通話を、発信する =====
+  const startCall = (mode: "video" | "audio") => {
+    if (!chat || chat.isGroup) return;
+    const myEmail = auth.currentUser?.email;
+    const otherEmail = chat.participants.find((p: string) => p !== myEmail);
+    router.push({ pathname: "/call/[id]", params: { id: id as string, mode, otherEmail } } as any);
+  };
+  // ===== 着信を、検知する（自分が、発信者では、なく、呼び出し中の、場合） =====
+  const [incomingCall, setIncomingCall] = useState<DocumentData | null>(null);
+  useEffect(() => {
+    if (!id || chat?.isGroup) return;
+    const myEmail = auth.currentUser?.email;
+    const unsubscribe = onSnapshot(doc(db, "calls", id), (docSnap) => {
+      if (!docSnap.exists()) {
+        setIncomingCall(null);
+        return;
+      }
+      const data = docSnap.data();
+      if (data.status === "ringing" && data.callerEmail !== myEmail) {
+        setIncomingCall(data);
+      } else {
+        setIncomingCall(null);
+      }
+    });
+    return unsubscribe;
+  }, [id, chat?.isGroup]);
+  const answerCall = () => {
+    if (!incomingCall || !id) return;
+    router.push({
+      pathname: "/call/[id]",
+      params: { id: id as string, mode: incomingCall.mode, otherEmail: incomingCall.callerEmail },
+    } as any);
+  };
+  const declineCall = async () => {
+    if (!id) return;
+    await deleteDoc(doc(db, "calls", id)).catch(() => {});
   };
   const getChatTitle = () => {
     if (!chat) return "";
@@ -413,6 +451,16 @@ export default function ChatDetailScreen() {
             <Text style={styles.headerTitle}>{getChatTitle()}</Text>
           </View>
           <View style={styles.headerRightRow}>
+            {!chat?.isGroup && (
+              <>
+                <TouchableOpacity onPress={() => startCall("audio")}>
+                  <MaterialIcons name="call" size={20} color="#333" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => startCall("video")}>
+                  <MaterialIcons name="videocam" size={22} color="#333" />
+                </TouchableOpacity>
+              </>
+            )}
             {chat?.isGroup && (
               <TouchableOpacity
                 onPress={() => router.push({ pathname: "/chat/[id]/info", params: { id: id as string } })}
@@ -830,6 +878,25 @@ export default function ChatDetailScreen() {
         startIndex={0}
         onClose={() => setLightboxVisible(false)}
       />
+      {/* ===== 着信中の、モーダル ===== */}
+      <Modal visible={!!incomingCall} transparent animationType="fade">
+        <View style={styles.incomingCallOverlay}>
+          <View style={styles.incomingCallCard}>
+            <Text style={styles.incomingCallTitle}>
+              {incomingCall?.mode === "video" ? "ビデオ通話の、着信" : "音声通話の、着信"}
+            </Text>
+            <Text style={styles.incomingCallSubtitle}>{getChatTitle()}</Text>
+            <View style={styles.incomingCallButtonRow}>
+              <TouchableOpacity style={styles.declineButton} onPress={declineCall}>
+                <MaterialIcons name="call-end" size={26} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.acceptButton} onPress={answerCall}>
+                <MaterialIcons name={incomingCall?.mode === "video" ? "videocam" : "call"} size={26} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1232,5 +1299,49 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 40,
     justifyContent: "center",
+  },
+  incomingCallOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  incomingCallCard: {
+    width: 280,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+  },
+  incomingCallTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#222",
+    marginBottom: 6,
+  },
+  incomingCallSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 24,
+  },
+  incomingCallButtonRow: {
+    flexDirection: "row",
+    gap: 40,
+  },
+  declineButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#e74c3c",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  acceptButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#2ecc71",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
