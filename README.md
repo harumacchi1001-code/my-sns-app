@@ -1,50 +1,70 @@
-# Welcome to your Expo app 👋
+# my-sns-app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+日記のように、日々の出来事や気づきを、写真・動画とあわせて綴る、Web版専用のSNSアプリです。
 
-## Get started
+## 主な機能
 
-1. Install dependencies
+### 投稿
+- テンプレートを使った投稿（12ジャンル、それぞれ複数のレイアウトから選択）
+- 自由入力モードでの投稿（見出し・画像・動画を自由に組み合わせ）
+- ハッシュタグ、非公開/下書き保存
+- 投稿ごとのインサイト（閲覧数の推移グラフ）
 
-   ```bash
-   npm install
-   ```
+### Nook（コミュニティ）
+- テーマ別のコミュニティを作成・参加
+- Discord風のチャット形式（返信・削除・絵文字リアクション・画像/動画送信）
+- 公開/非公開、承認制の参加設定
+- 定員制（作成時に人数の上限を設定、満員時は増員をリクエスト可能）
+- 投稿をNookのチャットに共有
 
-2. Start the app
+### チャット
+- 個人チャット・グループチャット
+- 返信、絵文字リアクション、画像/動画の送受信
+- メッセージの既読表示
+- 1対1の音声・ビデオ通話（WebRTC）
 
-   ```bash
-   npx expo start
-   ```
+### ストーリー
+- 写真・動画の投稿（複数枚まとめて投稿可能）
+- テキスト・スタンプを重ねて投稿
+- 閲覧者一覧の確認
+- 絵文字リアクション、返信（チャットに届く）
 
-In the output, you'll find options to open the app in a
+### 検索・発見
+- ユーザー・投稿・ハッシュタグ・Nookの検索
+- スワイプ形式でユーザー・投稿を発見
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### その他
+- フォロー / フォローリクエスト（非公開アカウント）
+- 通知（いいね・コメント・フォロー・Nook参加承認など）
+- プロフィールのカスタマイズ（マイカード、SNSリンクなど）
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 使用技術
 
-## Get a fresh project
+- [React Native](https://reactnative.dev/) / [Expo](https://expo.dev/)（SDK 54）
+- [Firebase](https://firebase.google.com/)（Authentication / Firestore / Storage）
+- TypeScript
+- Cloudflare Pages（Web版ホスティング）
 
-When you're ready, run:
+このアプリはWeb版での利用を前提に開発されています（iOS/Androidアプリには未対応）。
+
+## 開発の始め方
+
+1. 依存パッケージをインストール
 
 ```bash
-npm run reset-project
+   npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Firebaseの設定
 
-## Learn more
+   `firebaseConfig.ts` に、自身のFirebaseプロジェクトの設定情報を記入してください。
 
-To learn more about developing your project with Expo, look at the following resources:
+3. 開発サーバーを起動（Web版）
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+   npx expo start --web
+```
 
-## Join the community
+## ライセンス
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+このリポジトリは学習・個人開発を目的として公開しています。
