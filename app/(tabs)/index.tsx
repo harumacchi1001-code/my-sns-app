@@ -438,6 +438,73 @@ export default function HomeScreen() {
   const myUserData = userMap[auth.currentUser?.email || ""];
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {isWeb && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 0,
+            pointerEvents: "none",
+          }}
+          dangerouslySetInnerHTML={{
+            __html: `
+<style>
+@keyframes sway { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-10px) scaleY(1.04); } }
+@keyframes aurora { 0% { filter: hue-rotate(0deg) saturate(1); } 30% { filter: hue-rotate(35deg) saturate(1.3); } 60% { filter: hue-rotate(-25deg) saturate(1.2); } 100% { filter: hue-rotate(0deg) saturate(1); } }
+@keyframes pulseTravel { 0% { offset-distance: 0%; opacity: 0; } 5% { opacity: 1; } 92% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
+.band1 { animation: sway 9s ease-in-out infinite, aurora 16s ease-in-out infinite; transform-origin: center; }
+.band2 { animation: sway 11s ease-in-out infinite reverse, aurora 20s ease-in-out infinite reverse; transform-origin: center; }
+.band3 { animation: sway 13s ease-in-out infinite, aurora 24s ease-in-out infinite; transform-origin: center; }
+.pulse-dot { animation: pulseTravel 4s linear infinite; }
+</style>
+<svg viewBox="0 0 800 900" preserveAspectRatio="none" style="width:100%;height:100%;opacity:0.6;">
+<defs>
+<linearGradient id="sheerA" x1="0%" y1="0%" x2="100%" y2="20%">
+<stop offset="0%" stop-color="rgba(130,170,255,0)"/><stop offset="20%" stop-color="rgba(130,170,255,0.4)"/><stop offset="38%" stop-color="rgba(210,180,255,0.2)"/><stop offset="55%" stop-color="rgba(210,160,255,0.55)"/><stop offset="75%" stop-color="rgba(130,180,255,0.28)"/><stop offset="100%" stop-color="rgba(130,170,255,0)"/>
+</linearGradient>
+<linearGradient id="sheerB" x1="0%" y1="10%" x2="100%" y2="0%">
+<stop offset="0%" stop-color="rgba(100,150,240,0)"/><stop offset="28%" stop-color="rgba(110,160,250,0.32)"/><stop offset="48%" stop-color="rgba(80,110,210,0.14)"/><stop offset="66%" stop-color="rgba(200,150,255,0.4)"/><stop offset="100%" stop-color="rgba(160,130,240,0)"/>
+</linearGradient>
+<linearGradient id="sheerC" x1="0%" y1="0%" x2="100%" y2="10%">
+<stop offset="0%" stop-color="rgba(150,180,255,0)"/><stop offset="26%" stop-color="rgba(150,180,255,0.36)"/><stop offset="50%" stop-color="rgba(220,170,255,0.44)"/><stop offset="100%" stop-color="rgba(150,180,255,0)"/>
+</linearGradient>
+<linearGradient id="sheerEdge" x1="0%" y1="0%" x2="100%" y2="0%">
+<stop offset="0%" stop-color="rgba(255,255,255,0)"/><stop offset="45%" stop-color="rgba(255,255,255,0.55)"/><stop offset="55%" stop-color="rgba(255,255,255,0.55)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+</linearGradient>
+<linearGradient id="creaseLine" x1="0%" y1="0%" x2="100%" y2="0%">
+<stop offset="0%" stop-color="rgba(255,255,255,0)"/><stop offset="50%" stop-color="rgba(255,255,255,0.3)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+</linearGradient>
+</defs>
+<g class="band1">
+<path d="M -80 120 C 60 40, 180 200, 320 130 C 460 60, 580 220, 720 150 C 800 115, 860 130, 920 100 L 920 220 C 860 250, 800 235, 720 270 C 580 340, 460 180, 320 250 C 180 320, 60 160, -80 240 Z" fill="url(#sheerA)"/>
+<path d="M -80 120 C 60 40, 180 200, 320 130 C 460 60, 580 220, 720 150 C 800 115, 860 130, 920 100" fill="none" stroke="url(#sheerEdge)" stroke-width="2"/>
+<path d="M -80 120 C 60 40, 180 200, 320 130 C 460 60, 580 220, 720 150 C 800 115, 860 130, 920 100" fill="none" stroke="rgba(140,240,255,0.95)" stroke-width="1.6" stroke-dasharray="4 12 40 340"/>
+<path d="M 20 165 C 160 100, 280 235, 420 175" fill="none" stroke="url(#creaseLine)" stroke-width="1"/>
+<path d="M 460 175 C 600 115, 700 250, 820 175" fill="none" stroke="url(#creaseLine)" stroke-width="0.9"/>
+</g>
+<circle r="2.2" fill="rgba(150,245,255,0.95)" class="pulse-dot" style="offset-path: path('M -80 120 C 60 40, 180 200, 320 130 C 460 60, 580 220, 720 150 C 800 115, 860 130, 920 100');"/>
+<circle r="1.6" fill="rgba(150,245,255,0.8)" class="pulse-dot" style="offset-path: path('M -80 120 C 60 40, 180 200, 320 130 C 460 60, 580 220, 720 150 C 800 115, 860 130, 920 100'); animation-delay: 2s;"/>
+<g class="band2">
+<path d="M -80 470 C 80 560, 220 380, 380 460 C 520 530, 660 400, 820 480 L 820 600 C 660 520, 520 650, 380 580 C 220 500, 80 680, -80 590 Z" fill="url(#sheerB)"/>
+<path d="M -80 470 C 80 560, 220 380, 380 460 C 520 530, 660 400, 820 480" fill="none" stroke="url(#sheerEdge)" stroke-width="1.6" opacity="0.9"/>
+<path d="M -80 470 C 80 560, 220 380, 380 460 C 520 530, 660 400, 820 480" fill="none" stroke="rgba(140,240,255,0.85)" stroke-width="1.4" stroke-dasharray="4 10 34 300"/>
+<path d="M 40 545 C 160 495, 260 610, 400 550" fill="none" stroke="url(#creaseLine)" stroke-width="0.9"/>
+<path d="M 480 555 C 600 500, 700 610, 780 545" fill="none" stroke="url(#creaseLine)" stroke-width="0.8"/>
+</g>
+<circle r="2" fill="rgba(150,245,255,0.9)" class="pulse-dot" style="offset-path: path('M -80 470 C 80 560, 220 380, 380 460 C 520 530, 660 400, 820 480'); animation-duration: 5s; animation-delay: 1s;"/>
+<g class="band3">
+<path d="M -80 700 C 100 650, 260 800, 440 730 C 600 668, 740 780, 920 710 L 920 820 C 740 890, 600 778, 440 840 C 260 910, 100 760, -80 810 Z" fill="url(#sheerC)"/>
+<path d="M -80 700 C 100 650, 260 800, 440 730 C 600 668, 740 780, 920 710" fill="none" stroke="url(#sheerEdge)" stroke-width="1.4" opacity="0.85"/>
+<path d="M 60 770 C 200 720, 320 830, 460 780" fill="none" stroke="url(#creaseLine)" stroke-width="0.8"/>
+</g>
+</svg>
+`,
+          }}
+        />
+      )}
       <View style={styles.pageWrapper}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleHomePress}>
@@ -685,10 +752,22 @@ export default function HomeScreen() {
   );
 }
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
+  container: Platform.select({
+    web: {
+      flex: 1,
+      backgroundImage:
+        "radial-gradient(ellipse 55% 40% at 15% 12%, rgba(70,95,190,0.5) 0%, transparent 55%), " +
+        "radial-gradient(ellipse 50% 50% at 88% 8%, rgba(110,70,180,0.42) 0%, transparent 52%), " +
+        "radial-gradient(ellipse 55% 50% at 92% 78%, rgba(55,80,170,0.4) 0%, transparent 55%), " +
+        "radial-gradient(ellipse 50% 45% at 8% 88%, rgba(35,50,130,0.45) 0%, transparent 52%), " +
+        "linear-gradient(160deg, #000000 0%, #04050d 40%, #000000 100%)",
+      backgroundAttachment: "fixed",
+    } as any,
+    default: {
+      flex: 1,
+      backgroundColor: "#000000",
+    },
+  }),
   // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
     web: {
@@ -725,6 +804,7 @@ const styles = StyleSheet.create({
   header: {
     fontSize: 22,
     fontWeight: "700",
+    color: "#ffffff",
   },
   chatIconWrapper: {
     position: "relative",
@@ -808,18 +888,40 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
   },
-  // ===== ここからWeb版専用（card内の枠線・角丸のみ） =====
-  card: {
-    borderWidth: Platform.OS === "web" ? 1 : 0,
-    borderColor: "#eee",
-    borderRadius: Platform.OS === "web" ? 12 : 0,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
-    paddingBottom: 16,
-    marginBottom: 16,
-    overflow: "hidden",
-  },
+  // ===== ここからWeb版専用：ガラス風のカード =====
+  card: Platform.select({
+    web: {
+      backgroundColor: "rgba(255,255,255,0.05)",
+      backdropFilter: "blur(36px) saturate(190%)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.1)",
+      borderRadius: 20,
+      paddingBottom: 16,
+      marginBottom: 20,
+      overflow: "hidden",
+    } as any,
+    default: {
+      backgroundColor: "#12172a",
+      borderBottomWidth: 0.5,
+      borderBottomColor: "rgba(255,255,255,0.1)",
+      paddingBottom: 16,
+      marginBottom: 16,
+      overflow: "hidden",
+    },
+  }),
   // ===== ここまでWeb版専用 =====
+  waveLayer: Platform.select({
+    web: {
+      position: "fixed" as any,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 0,
+      opacity: 0.5,
+    },
+    default: { display: "none" },
+  }),
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -836,11 +938,11 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#222",
+    color: "#ffffff",
   },
   date: {
     fontSize: 11,
-    color: "#999",
+    color: "rgba(255,255,255,0.4)",
   },
   thumbnail: {
     width: "100%",
@@ -853,7 +955,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#222",
+    color: "#ffffff",
     marginBottom: 4,
   },
   hashtagRow: {
@@ -866,11 +968,11 @@ const styles = StyleSheet.create({
   hashtagText: {
     fontSize: 13,
     lineHeight: 14,
-    color: "#4a90e2",
+    color: "#96b0f2",
   },
   bodyPreview: {
     fontSize: 13,
-    color: "#666",
+    color: "rgba(255,255,255,0.5)",
     marginBottom: 8,
   },
   actionsRow: {
@@ -884,9 +986,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  metaText: {
+   metaText: {
     fontSize: 14,
-    color: "#666",
+    color: "rgba(255,255,255,0.45)",
   },
   likedText: {
     fontSize: 14,
