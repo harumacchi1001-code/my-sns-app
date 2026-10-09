@@ -85,6 +85,7 @@ export default function WebTabLayout() {
       <Animated.View
         style={[
           styles.tabsContent,
+          { backgroundColor: "transparent" } as any,
           !isMobileWidth && { paddingLeft: paddingAnim },
         ]}
       >
@@ -121,7 +122,8 @@ const styles = StyleSheet.create({
   // ===== ここまでWeb版専用 =====
   tabsContent: {
     flex: 1,
-  },
+    backgroundColor: "transparent",
+  } as any,
   // ===== ここからWeb版専用：スマホ幅の下タブバーのスタイル =====
   mobileTabBar: {
     position: "fixed" as any,

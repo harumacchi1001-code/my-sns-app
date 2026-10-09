@@ -167,7 +167,7 @@ export default function WebSidebar({ onExpandChange }: { onExpandChange?: (expan
           <MaterialIcons
             name={item.icon}
             size={22}
-            color={isActive || isHovered ? "#222" : "#555"}
+            color={isActive || isHovered ? "#ffffff" : "rgba(255,255,255,0.55)"}
           />
         </View>
         {isExpanded && (
@@ -276,26 +276,46 @@ export default function WebSidebar({ onExpandChange }: { onExpandChange?: (expan
 const styles = StyleSheet.create({
   wholeAreaWrapper: {
     position: "fixed" as any,
-    top: 0,
-    left: 0,
-    bottom: 0,
+    top: 16,
+    left: 16,
+    bottom: 16,
     zIndex: 10,
   },
   // ===== ここからWeb版専用：ナビゲーション＋設定をまとめる、1つの白い縦長の箱 =====
-  sidebarColumn: {
-    position: "absolute" as any,
-    top: 0,
-    left: 0,
-    bottom: 0,
-    borderRightWidth: 1,
-    borderRightColor: "#eee",
-    backgroundColor: "#fff",
-    paddingTop: 20,
-    paddingBottom: 20,
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    overflow: "hidden",
-  },
+  sidebarColumn: Platform.select({
+    web: {
+      position: "absolute" as any,
+      top: 0,
+      left: 0,
+      bottom: 0,
+      borderRadius: 32,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.12)",
+      backgroundColor: "rgba(20,20,26,0.55)",
+      backdropFilter: "blur(28px) saturate(180%)",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+      paddingTop: 16,
+      paddingBottom: 16,
+      paddingHorizontal: 0,
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      overflow: "hidden",
+    } as any,
+    default: {
+      position: "absolute" as any,
+      top: 0,
+      left: 0,
+      bottom: 0,
+      borderRightWidth: 1,
+      borderRightColor: "#333",
+      backgroundColor: "#12172a",
+      paddingTop: 20,
+      paddingBottom: 20,
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      overflow: "hidden",
+    },
+  }),
   topNavGroup: {
     alignItems: "flex-start",
     width: "100%",
@@ -312,16 +332,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: 44,
-    borderRadius: 8,
+    borderRadius: 22,
     marginBottom: 6,
     width: "100%",
   },
-  navItemActive: {
-    backgroundColor: "#f0f0f0",
-  },
-  navItemHovered: {
-    backgroundColor: "#f7f7f7",
-  },
+  navItemActive: Platform.select({
+    web: {
+      backgroundColor: "rgba(255,255,255,0.16)",
+      boxShadow:
+        "0 3px 10px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.35), inset 0 -1px 2px rgba(0,0,0,0.15)",
+    } as any,
+    default: {
+      backgroundColor: "rgba(255,255,255,0.15)",
+    },
+  }),
+  navItemHovered: Platform.select({
+    web: {
+      backgroundColor: "rgba(255,255,255,0.08)",
+    } as any,
+    default: {
+      backgroundColor: "rgba(255,255,255,0.08)",
+    },
+  }),
   iconWrapper: {
     width: SIDEBAR_COLLAPSED_WIDTH,
     height: 44,
@@ -330,12 +362,12 @@ const styles = StyleSheet.create({
   },
   navLabel: {
     fontSize: 14,
-    color: "#555",
+    color: "rgba(255,255,255,0.6)",
     fontWeight: "400",
     paddingRight: 16,
   },
   navLabelEmphasis: {
-    color: "#222",
+    color: "#ffffff",
     fontWeight: "700",
   },
   homeSubSidebar: {
@@ -343,43 +375,45 @@ const styles = StyleSheet.create({
     left: SIDEBAR_EXPANDED_WIDTH,
     top: 76,
     width: SUB_SIDEBAR_WIDTH,
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(20,24,45,0.85)",
+    backdropFilter: "blur(24px) saturate(180%)",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "rgba(255,255,255,0.12)",
     paddingVertical: 6,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 4,
     zIndex: 30,
-  },
+  } as any,
   homeSubMenuItem: {
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   homeSubMenuText: {
     fontSize: 14,
-    color: "#333",
+    color: "rgba(255,255,255,0.85)",
   },
   settingsSubSidebar: {
     position: "fixed" as any,
     left: SIDEBAR_EXPANDED_WIDTH,
     bottom: 20,
     width: 200,
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(20,24,45,0.85)",
+    backdropFilter: "blur(24px) saturate(180%)",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "rgba(255,255,255,0.12)",
     paddingVertical: 6,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 4,
     zIndex: 30,
-  },
+  } as any,
   settingsSubMenuItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -389,10 +423,10 @@ const styles = StyleSheet.create({
   },
   settingsSubMenuText: {
     fontSize: 14,
-    color: "#333",
+    color: "rgba(255,255,255,0.85)",
   },
   settingsSubMenuTextDanger: {
-    color: "#e74c3c",
+    color: "#ff7a7a",
   },
   settingsSubMenuBadge: {
     backgroundColor: "#e74c3c",

@@ -888,17 +888,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
   },
-  // ===== ここからWeb版専用：ガラス風のカード =====
+  // ===== ここからWeb版専用：ガラス風の、浮遊感のある、カード =====
   card: Platform.select({
     web: {
-      backgroundColor: "rgba(255,255,255,0.05)",
-      backdropFilter: "blur(36px) saturate(190%)",
+      backgroundColor: "rgba(255,255,255,0.07)",
+      backdropFilter: "blur(40px) saturate(200%)",
       borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.1)",
+      borderColor: "rgba(255,255,255,0.22)",
       borderRadius: 20,
       paddingBottom: 16,
-      marginBottom: 20,
+      marginBottom: 24,
       overflow: "hidden",
+      boxShadow:
+        "0 24px 60px rgba(0,0,0,0.65), 0 4px 16px rgba(0,0,0,0.4), inset 0 1.5px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.2)",
     } as any,
     default: {
       backgroundColor: "#12172a",
