@@ -21,7 +21,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import PostThumbnail from "../../components/PostThumbnail";
 import StampFrame from "../../components/StampFrame";
 import { auth, db } from "../../firebaseConfig";
+
 type Post = DocumentData & { id: string };
+
 const SNS_LIST = [
   { key: "x", label: "X" },
   { key: "instagram", label: "Instagram" },
@@ -29,11 +31,41 @@ const SNS_LIST = [
   { key: "youtube", label: "YouTube" },
   { key: "facebook", label: "Facebook" },
 ];
+
 // ===== ここからWeb版専用 =====
 const isWeb = Platform.OS === "web";
+
+// Web版ならa、それ以外（スマホ）ならbを返す
+const pick = <T,>(a: T, b: T): T => (isWeb ? a : b);
+
+// リキッドグラス：ガラスの箱の共通スタイル（Web版のみ）
+const webGlassBox: any = isWeb
+  ? {
+      backgroundColor: "rgba(24,26,44,0.55)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.12)",
+      backdropFilter: "blur(24px) saturate(180%)",
+      boxShadow: "0 12px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)",
+    }
+  : {};
+
+// リキッドグラス：選択中（少し浮き上がったガラス）のスタイル（Web版のみ）
+const webSelected: any = isWeb
+  ? {
+      backgroundColor: "rgba(255,255,255,0.16)",
+      boxShadow:
+        "0 3px 10px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.35), inset 0 -1px 2px rgba(0,0,0,0.15)",
+    }
+  : {};
+
+// メニューのアイコン色・削除の色（Web版は暗い背景用）
+const menuIconColor = pick("#ffffff", "#333");
+const dangerColor = pick("#ff7a7a", "#e74c3c");
 // ===== ここまでWeb版専用 =====
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_THUMBNAIL_RATIO = 16 / 9;
+
 export default function ProfileScreen() {
   const router = useRouter();
   const [userData, setUserData] = useState<DocumentData | null>(null);
@@ -55,6 +87,7 @@ export default function ProfileScreen() {
   // ===== ここまでWeb版専用 =====
   // ===== 自分の、24時間以内のストーリー一覧 =====
   const [myStories, setMyStories] = useState<DocumentData[]>([]);
+
   useEffect(() => {
     // ログイン状態の復元が完了するのを、確実に待ってからデータ取得を始める
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -64,6 +97,7 @@ export default function ProfileScreen() {
       }
       const uid = user.uid;
       const myEmail = user.email;
+
       const unsubscribeUser = onSnapshot(doc(db, "users", uid), (docSnap) => {
         if (docSnap.exists()) {
           setUserData(docSnap.data());
@@ -72,6 +106,7 @@ export default function ProfileScreen() {
           // ===== ここまでWeb版専用 =====
         }
       });
+
       const publishedQuery = query(
         collection(db, "posts"),
         where("authorEmail", "==", myEmail),
@@ -86,6 +121,7 @@ export default function ProfileScreen() {
         setPublishedPosts(data);
         setLoading(false);
       });
+
       const draftQuery = query(
         collection(db, "posts"),
         where("authorEmail", "==", myEmail),
@@ -99,6 +135,7 @@ export default function ProfileScreen() {
         })) as Post[];
         setDraftPosts(data);
       });
+
       const privateQuery = query(
         collection(db, "posts"),
         where("authorEmail", "==", myEmail),
@@ -112,6 +149,7 @@ export default function ProfileScreen() {
         })) as Post[];
         setPrivatePosts(data);
       });
+
       // ===== 自分のストーリーを取得（24時間以内のもののみ） =====
       const storiesQuery = query(collection(db, "stories"), where("authorId", "==", uid));
       const unsubscribeStories = onSnapshot(storiesQuery, (snapshot) => {
@@ -124,6 +162,7 @@ export default function ProfileScreen() {
           });
         setMyStories(active);
       });
+
       return () => {
         unsubscribeUser();
         unsubscribePublished();
@@ -132,8 +171,10 @@ export default function ProfileScreen() {
         unsubscribeStories();
       };
     });
+
     return () => unsubscribeAuth();
   }, []);
+
   // ===== 自分が、参加している、Nookの一覧を、取得する（全Nookを走査して、自分がmembersに、いるか確認） =====
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -150,6 +191,7 @@ export default function ProfileScreen() {
           })
         );
         setMyNooks(nooks);
+
         // ===== 参加している、それぞれの、Nookの、未読メッセージ数を、数える =====
         const myEmail = user.email;
         const counts: Record<string, number> = {};
@@ -169,14 +211,17 @@ export default function ProfileScreen() {
     });
     return () => unsubscribeAuth();
   }, []);
+
   const fetchLatestData = useCallback(async () => {
     const uid = auth.currentUser?.uid;
     const myEmail = auth.currentUser?.email;
     if (!uid || !myEmail) return;
+
     const userSnap = await getDoc(doc(db, "users", uid));
     if (userSnap.exists()) {
       setUserData(userSnap.data());
     }
+
     const publishedQuery = query(
       collection(db, "posts"),
       where("authorEmail", "==", myEmail),
@@ -195,11 +240,13 @@ export default function ProfileScreen() {
       where("status", "==", "private"),
       orderBy("createdAt", "desc")
     );
+
     const [publishedSnap, draftSnap, privateSnap] = await Promise.all([
       getDocs(publishedQuery),
       getDocs(draftQuery),
       getDocs(privateQuery),
     ]);
+
     setPublishedPosts(
       publishedSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as Post[]
     );
@@ -210,6 +257,7 @@ export default function ProfileScreen() {
       privateSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })) as Post[]
     );
   }, []);
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -218,26 +266,32 @@ export default function ProfileScreen() {
       setRefreshing(false);
     }
   }, [fetchLatestData]);
+
   const openLink = (url: string) => {
     if (url) Linking.openURL(url);
   };
+
   const goToFollowersList = (mode: "followers" | "following") => {
     const myUid = auth.currentUser?.uid;
     if (!myUid) return;
     router.push({ pathname: "/followers-list", params: { userId: myUid, mode } });
   };
+
   const handleEditPost = (post: Post) => {
     setMenuPost(null);
     router.push({ pathname: "/(tabs)/post", params: { draftId: post.id } });
   };
+
   const handleMakePrivate = async (post: Post) => {
     setMenuPost(null);
     await updateDoc(doc(db, "posts", post.id), { status: "private" });
   };
+
   const handleMakePublic = async (post: Post) => {
     setMenuPost(null);
     await updateDoc(doc(db, "posts", post.id), { status: "published" });
   };
+
   const handleDeletePost = (post: Post) => {
     setMenuPost(null);
     if (isWeb) {
@@ -258,6 +312,7 @@ export default function ProfileScreen() {
       },
     ]);
   };
+
   const handlePostMenuButtonPress = (post: Post, event: any) => {
     if (isWeb) {
       const pageX = event?.nativeEvent?.pageX ?? 100;
@@ -266,6 +321,7 @@ export default function ProfileScreen() {
     }
     setMenuPost(post);
   };
+
   const handleMenuButtonPress = () => {
     if (isWeb) {
       setWebMenuVisible(true);
@@ -273,14 +329,17 @@ export default function ProfileScreen() {
       router.push("/menu");
     }
   };
+
   const handleWebMenuNavigate = (path: string) => {
     setWebMenuVisible(false);
     router.push(path as any);
   };
+
   const performLogout = async () => {
     await signOut(auth);
     router.replace("/login");
   };
+
   const handleWebLogout = () => {
     setWebMenuVisible(false);
     if (isWeb) {
@@ -299,6 +358,7 @@ export default function ProfileScreen() {
       },
     ]);
   };
+
   // ===== 自分のストーリーがあれば、タップで閲覧画面を開く =====
   const handleAvatarPress = () => {
     const myUid = auth.currentUser?.uid;
@@ -306,18 +366,22 @@ export default function ProfileScreen() {
       router.push({ pathname: "/story-view", params: { authorId: myUid } });
     }
   };
+
   // ===== 自分のストーリーに、まだ見ていないものがあるか =====
   const myUid = auth.currentUser?.uid;
   const myHasUnread = myStories.some((s) => !(s.viewedBy || []).includes(myUid));
+
   const displayedPosts =
     activeTab === "published" ? publishedPosts : activeTab === "draft" ? draftPosts : privatePosts;
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={pick("#ffffff", undefined as any)} />
       </View>
     );
   }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
@@ -325,10 +389,11 @@ export default function ProfileScreen() {
           <TouchableOpacity onPress={handleRefresh}>
             <Text style={styles.handleHeader}>{userData?.handle || ""}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleMenuButtonPress}>
-            <MaterialIcons name="menu" size={26} color="#222" />
+          <TouchableOpacity style={styles.menuIconButton} onPress={handleMenuButtonPress}>
+            <MaterialIcons name="menu" size={26} color={pick("#ffffff", "#222")} />
           </TouchableOpacity>
         </View>
+
                 <FlatList
           key={activeTab === "nook" ? "nook-list" : "post-grid"}
           data={activeTab === "nook" ? myNooks : displayedPosts}
@@ -341,6 +406,8 @@ export default function ProfileScreen() {
           }
           ListHeaderComponent={
             <View>
+              {/* ===== Web版：ヘッダー部分を1枚のガラスのカードにまとめる（スマホでは枠なし） ===== */}
+              <View style={styles.profileGlassCard}>
               <View style={styles.profileTopRow}>
                 <View style={styles.avatarWrapper}>
                   <TouchableOpacity
@@ -364,6 +431,7 @@ export default function ProfileScreen() {
                     <MaterialIcons name="add" size={16} color="#fff" />
                   </TouchableOpacity>
                 </View>
+
                 <View style={styles.statsRow}>
                   <View style={styles.statItem}>
                     <Text style={styles.statNumber}>{publishedPosts.length}</Text>
@@ -385,19 +453,22 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
+
               <Text
                 style={[
                   styles.usernameText,
-                  { color: userData?.usernameColor || "#222" },
+                  { color: userData?.usernameColor || pick("#9db4ff", "#222") },
                 ]}
               >
                 {userData?.username || "ユーザー"}
               </Text>
+
               {userData?.bio ? (
                 <Text style={styles.bio}>{userData.bio}</Text>
               ) : (
                 <Text style={styles.bioPlaceholder}>自己紹介文はまだありません</Text>
               )}
+
               <View style={styles.snsRow}>
                 {SNS_LIST.map((sns) =>
                   userData?.snsLinks?.[sns.key] ? (
@@ -411,6 +482,7 @@ export default function ProfileScreen() {
                   ) : null
                 )}
               </View>
+
               <View style={styles.actionRow}>
                 <TouchableOpacity
                   style={styles.actionButton}
@@ -425,6 +497,9 @@ export default function ProfileScreen() {
                   <Text style={styles.actionButtonText}>マイカードを編集</Text>
                 </TouchableOpacity>
               </View>
+              </View>
+              {/* ===== ここまで：ガラスのカード ===== */}
+
               <View style={styles.tabRow}>
                 <TouchableOpacity
                   style={[styles.tabButton, activeTab === "published" && styles.tabButtonActive]}
@@ -545,6 +620,7 @@ export default function ProfileScreen() {
           }}
         />
       </View>
+
       <Modal
         visible={!!menuPost}
         transparent
@@ -565,7 +641,7 @@ export default function ProfileScreen() {
                   style={isWeb ? styles.webMenuItem : styles.menuItem}
                   onPress={() => menuPost && handleEditPost(menuPost)}
                 >
-                  <MaterialIcons name="edit" size={20} color="#333" />
+                  <MaterialIcons name="edit" size={20} color={menuIconColor} />
                   <Text style={isWeb ? styles.webMenuItemText : styles.menuItemText}>編集</Text>
                 </TouchableOpacity>
                 {menuPost?.status === "private" ? (
@@ -573,7 +649,7 @@ export default function ProfileScreen() {
                     style={isWeb ? styles.webMenuItem : styles.menuItem}
                     onPress={() => menuPost && handleMakePublic(menuPost)}
                   >
-                    <MaterialIcons name="public" size={20} color="#333" />
+                    <MaterialIcons name="public" size={20} color={menuIconColor} />
                     <Text style={isWeb ? styles.webMenuItemText : styles.menuItemText}>公開する</Text>
                   </TouchableOpacity>
                 ) : (
@@ -581,7 +657,7 @@ export default function ProfileScreen() {
                     style={isWeb ? styles.webMenuItem : styles.menuItem}
                     onPress={() => menuPost && handleMakePrivate(menuPost)}
                   >
-                    <MaterialIcons name="lock-outline" size={20} color="#333" />
+                    <MaterialIcons name="lock-outline" size={20} color={menuIconColor} />
                     <Text style={isWeb ? styles.webMenuItemText : styles.menuItemText}>非公開にする</Text>
                   </TouchableOpacity>
                 )}
@@ -589,8 +665,8 @@ export default function ProfileScreen() {
                   style={isWeb ? styles.webMenuItem : styles.menuItem}
                   onPress={() => menuPost && handleDeletePost(menuPost)}
                 >
-                  <MaterialIcons name="delete-outline" size={20} color="#e74c3c" />
-                  <Text style={[isWeb ? styles.webMenuItemText : styles.menuItemText, { color: "#e74c3c" }]}>削除</Text>
+                  <MaterialIcons name="delete-outline" size={20} color={dangerColor} />
+                  <Text style={[isWeb ? styles.webMenuItemText : styles.menuItemText, { color: dangerColor }]}>削除</Text>
                 </TouchableOpacity>
                 {!isWeb && (
                   <TouchableOpacity style={styles.menuCancel} onPress={() => setMenuPost(null)}>
@@ -602,6 +678,7 @@ export default function ProfileScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
       {/* ===== ここからWeb版専用：≡ボタンのポップアップメニュー ===== */}
       <Modal
         visible={webMenuVisible}
@@ -617,7 +694,7 @@ export default function ProfileScreen() {
                   style={styles.webMenuItem}
                   onPress={() => handleWebMenuNavigate("/follow-requests")}
                 >
-                  <MaterialIcons name="person-add" size={20} color="#333" />
+                  <MaterialIcons name="person-add" size={20} color="#ffffff" />
                   <Text style={styles.webMenuItemText}>フォローリクエスト</Text>
                   {followRequestCount > 0 && (
                     <View style={styles.webMenuBadge}>
@@ -631,27 +708,27 @@ export default function ProfileScreen() {
                   style={styles.webMenuItem}
                   onPress={() => handleWebMenuNavigate("/liked-posts")}
                 >
-                  <MaterialIcons name="favorite-border" size={20} color="#333" />
+                  <MaterialIcons name="favorite-border" size={20} color="#ffffff" />
                   <Text style={styles.webMenuItemText}>いいねした投稿</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.webMenuItem}
                   onPress={() => handleWebMenuNavigate("/saved-posts")}
                 >
-                  <MaterialIcons name="bookmark-border" size={20} color="#333" />
+                  <MaterialIcons name="bookmark-border" size={20} color="#ffffff" />
                   <Text style={styles.webMenuItemText}>保存した投稿</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.webMenuItem}
                   onPress={() => handleWebMenuNavigate("/comment-history")}
                 >
-                  <MaterialIcons name="chat-bubble-outline" size={20} color="#333" />
+                  <MaterialIcons name="chat-bubble-outline" size={20} color="#ffffff" />
                   <Text style={styles.webMenuItemText}>コメント履歴</Text>
                 </TouchableOpacity>
                 <View style={styles.webMenuDivider} />
                 <TouchableOpacity style={styles.webMenuItem} onPress={handleWebLogout}>
-                  <MaterialIcons name="logout" size={20} color="#e74c3c" />
-                  <Text style={[styles.webMenuItemText, { color: "#e74c3c" }]}>ログアウト</Text>
+                  <MaterialIcons name="logout" size={20} color={dangerColor} />
+                  <Text style={[styles.webMenuItemText, { color: dangerColor }]}>ログアウト</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -662,10 +739,19 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...(isWeb
+      ? ({
+          backgroundColor: "#05060d",
+          backgroundImage:
+            "radial-gradient(ellipse 60% 45% at 18% 10%, rgba(70,95,190,0.5), transparent 70%), radial-gradient(ellipse 55% 45% at 85% 80%, rgba(110,70,190,0.35), transparent 70%), linear-gradient(160deg, #05060d 0%, #0a0d1c 55%, #080915 100%)",
+        } as any)
+      : {}),
   },
   // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
@@ -687,7 +773,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#999",
+    color: pick("rgba(255,255,255,0.5)", "#999"),
     fontSize: 14,
   },
   header: {
@@ -695,15 +781,37 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
+    paddingVertical: pick(8, 12),
+    borderBottomWidth: pick(0, 0.5),
     borderBottomColor: "#eee",
   },
+  // ≡ボタン：Web版は丸いガラスのボタン
+  menuIconButton: isWeb
+    ? ({
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: "center",
+        alignItems: "center",
+        ...webGlassBox,
+      } as any)
+    : {},
   handleHeader: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#222",
+    color: pick("#ffffff", "#222"),
   },
+  // ヘッダー部分（アイコン〜編集ボタン）を包む、ガラスのカード（スマホでは枠なし）
+  profileGlassCard: isWeb
+    ? ({
+        marginHorizontal: 4,
+        marginTop: 6,
+        paddingBottom: 6,
+        borderRadius: 32,
+        overflow: "hidden",
+        ...webGlassBox,
+      } as any)
+    : {},
   profileTopRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -727,7 +835,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: pick("#0a0d1c", "#fff"),
   },
   statsRow: {
     flex: 1,
@@ -740,10 +848,11 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 17,
     fontWeight: "700",
+    ...(isWeb ? { color: "#ffffff" } : {}),
   },
   statLabel: {
     fontSize: 12,
-    color: "#666",
+    color: pick("rgba(255,255,255,0.5)", "#666"),
     marginTop: 2,
   },
   usernameText: {
@@ -754,13 +863,13 @@ const styles = StyleSheet.create({
   },
   bio: {
     fontSize: 14,
-    color: "#333",
+    color: pick("rgba(255,255,255,0.82)", "#333"),
     paddingHorizontal: 16,
     marginBottom: 10,
   },
   bioPlaceholder: {
     fontSize: 13,
-    color: "#bbb",
+    color: pick("rgba(255,255,255,0.4)", "#bbb"),
     paddingHorizontal: 16,
     marginBottom: 10,
   },
@@ -773,14 +882,15 @@ const styles = StyleSheet.create({
   },
   snsButton: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 6,
-    paddingHorizontal: 10,
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
+    borderRadius: pick(14, 6),
+    paddingHorizontal: pick(12, 10),
     paddingVertical: 5,
+    ...(isWeb ? { backgroundColor: "rgba(255,255,255,0.06)" } : {}),
   },
   snsButtonText: {
     fontSize: 12,
-    color: "#333",
+    color: pick("rgba(255,255,255,0.85)", "#333"),
   },
   actionRow: {
     flexDirection: "row",
@@ -791,41 +901,65 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    paddingVertical: 8,
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
+    borderRadius: pick(19, 8),
+    paddingVertical: pick(10, 8),
     alignItems: "center",
+    ...(isWeb ? { backgroundColor: "rgba(255,255,255,0.06)" } : {}),
   },
   actionButtonText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#333",
+    color: pick("#ffffff", "#333"),
   },
-  tabRow: {
-    flexDirection: "row",
-    borderTopWidth: 0.5,
-    borderTopColor: "#eee",
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  tabButtonActive: {
-    borderBottomColor: "#222",
-  },
+  // タブ：Web版は丸いガラスのカプセル、スマホは今まで通りの下線
+  tabRow: isWeb
+    ? ({
+        flexDirection: "row",
+        gap: 4,
+        padding: 5,
+        marginHorizontal: 4,
+        marginTop: 16,
+        marginBottom: 14,
+        borderRadius: 26,
+        ...webGlassBox,
+      } as any)
+    : {
+        flexDirection: "row",
+        borderTopWidth: 0.5,
+        borderTopColor: "#eee",
+        borderBottomWidth: 0.5,
+        borderBottomColor: "#eee",
+      },
+  tabButton: isWeb
+    ? ({
+        flex: 1,
+        paddingVertical: 9,
+        alignItems: "center",
+        borderRadius: 17,
+        // @ts-ignore（Web専用のなめらかな変化）
+        transition: "all 0.18s ease",
+      } as any)
+    : {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: "center",
+        borderBottomWidth: 2,
+        borderBottomColor: "transparent",
+      },
+  tabButtonActive: isWeb
+    ? ({ ...webSelected } as any)
+    : {
+        borderBottomColor: "#222",
+      },
   tabText: {
     fontSize: 13,
-    color: "#999",
+    color: pick("rgba(255,255,255,0.6)", "#999"),
   },
   tabTextActive: {
     fontSize: 13,
-    color: "#222",
-    fontWeight: "600",
+    color: pick("#ffffff", "#222"),
+    fontWeight: pick("700", "600") as any,
   },
   listContent: {
     paddingHorizontal: 12,
@@ -843,6 +977,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#fff",
     position: "relative",
+    // ===== Web版：ガラスのカード =====
+    ...(isWeb ? ({ ...webGlassBox, borderRadius: 20, borderWidth: 1 } as any) : {}),
   },
   groupCard: {
     flexDirection: "row",
@@ -855,41 +991,42 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#fafafa",
     marginBottom: 10,
+    ...(isWeb ? ({ ...webGlassBox, borderRadius: 20 } as any) : {}),
   },
   groupCardIconWrapper: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: pick("rgba(255,255,255,0.1)", "#f0f0f0"),
     justifyContent: "center",
     alignItems: "center",
   },
   groupCardName: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#222",
+    color: pick("#ffffff", "#222"),
   },
   groupCardMeta: {
     fontSize: 12,
-    color: "#999",
+    color: pick("rgba(255,255,255,0.5)", "#999"),
     marginTop: 2,
   },
   groupCardMetaUnread: {
     fontSize: 12,
-    color: "#4a90e2",
+    color: pick("#9db4ff", "#4a90e2"),
     fontWeight: "600",
     marginTop: 2,
   },
   groupCardManageButton: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   groupCardManageButtonText: {
     fontSize: 12,
-    color: "#333",
+    color: pick("#ffffff", "#333"),
     fontWeight: "600",
   },
   menuButton: {
@@ -914,20 +1051,21 @@ const styles = StyleSheet.create({
   thumbnailPlaceholder: {
     width: "100%",
     aspectRatio: 16 / 9,
-    backgroundColor: "#eee",
+    backgroundColor: pick("rgba(255,255,255,0.08)", "#eee"),
   },
   cardBody: {
     padding: 8,
+    ...(isWeb ? { paddingHorizontal: 12, paddingVertical: 10 } : {}),
   },
   title: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#222",
+    color: pick("#ffffff", "#222"),
     marginBottom: 6,
   },
   metaText: {
     fontSize: 11,
-    color: "#666",
+    color: pick("rgba(255,255,255,0.55)", "#666"),
   },
   menuOverlay: {
     flex: 1,
@@ -978,19 +1116,26 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingRight: Platform.OS === "web" ? undefined : 0,
   },
+  // ポップアップメニュー（Web専用）：暗いガラス風
   webMenuPopup: {
     width: 260,
     marginRight: "10%" as any,
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: "rgba(24,26,44,0.92)",
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: "rgba(255,255,255,0.14)",
     paddingVertical: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 6,
+    ...(isWeb
+      ? ({
+          backdropFilter: "blur(24px) saturate(180%)",
+          boxShadow: "0 12px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12)",
+        } as any)
+      : {}),
   },
   webMenuItem: {
     flexDirection: "row",
@@ -1001,7 +1146,7 @@ const styles = StyleSheet.create({
   },
   webMenuItemText: {
     fontSize: 14,
-    color: "#222",
+    color: "#ffffff",
     flex: 1,
   },
   webMenuBadge: {
@@ -1020,7 +1165,7 @@ const styles = StyleSheet.create({
   },
   webMenuDivider: {
     height: 0.5,
-    backgroundColor: "#eee",
+    backgroundColor: "rgba(255,255,255,0.14)",
     marginVertical: 6,
     marginHorizontal: 16,
   },
