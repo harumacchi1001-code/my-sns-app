@@ -17,11 +17,21 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import {
+  accentColor,
+  dangerColor,
+  isWeb,
+  pick,
+  textFaint,
+  textSub,
+  webGlassBox,
+  webScreenBackground,
+  webSelected,
+} from "../components/glass";
 import { auth, db } from "../firebaseConfig";
 
-// ===== ここからWeb版専用 =====
-const isWeb = Platform.OS === "web";
-// ===== ここまでWeb版専用 =====
+// 入力欄のヒント文字の色（Web版は暗い背景用の薄い白。スマホは標準のまま）
+const placeholderColor = pick("rgba(255,255,255,0.4)", undefined as any);
 
 // 興味のあるジャンルの一覧（発見スワイプ機能で使用）
 const INTEREST_GENRES = [
@@ -204,7 +214,7 @@ export default function SignupDetailsScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* ===== ここからWeb版専用（PC向けに中央寄せ・固定幅にするラッパー） ===== */}
+      {/* ===== ここからWeb版専用（PC向けに中央寄せ・固定幅のガラスのカードにするラッパー） ===== */}
       <View style={styles.formWrapper}>
       {/* ===== ここまでWeb版専用 ===== */}
         {isNewSignup === "true" && (
@@ -223,6 +233,7 @@ export default function SignupDetailsScreen() {
             onChangeText={setDisplayName}
             style={styles.input}
             placeholder={t("signupDetails.displayNamePlaceholder")}
+            placeholderTextColor={placeholderColor}
             returnKeyType="done"
             onSubmitEditing={Keyboard.dismiss}
           />
@@ -235,6 +246,7 @@ export default function SignupDetailsScreen() {
               onChangeText={validateHandle}
               style={styles.handleInput}
               placeholder={t("signupDetails.handlePlaceholder")}
+              placeholderTextColor={placeholderColor}
               autoCapitalize="none"
               returnKeyType="done"
               onSubmitEditing={Keyboard.dismiss}
@@ -249,6 +261,7 @@ export default function SignupDetailsScreen() {
             onChangeText={setPhoneNumber}
             style={styles.input}
             placeholder={t("signupDetails.phonePlaceholder")}
+            placeholderTextColor={placeholderColor}
             keyboardType="phone-pad"
             returnKeyType="done"
             onSubmitEditing={Keyboard.dismiss}
@@ -352,6 +365,7 @@ export default function SignupDetailsScreen() {
                 onChangeText={(text) => updateOtherGenreEntry(entry.id, text)}
                 style={[styles.input, styles.otherGenreInput]}
                 placeholder="興味のあるジャンルを入力"
+                placeholderTextColor={placeholderColor}
                 returnKeyType="done"
                 onSubmitEditing={Keyboard.dismiss}
               />
@@ -389,13 +403,14 @@ export default function SignupDetailsScreen() {
   );
 }
 
-// ===== ここからWeb版専用：HTML input用の、通常のCSSスタイル =====
+// ===== ここからWeb版専用：HTML input用の、通常のCSSスタイル(暗いガラス風) =====
 const webDateInputStyle: any = {
-  borderWidth: 1,
-  borderColor: "#ddd",
+  border: "1px solid rgba(255,255,255,0.18)",
   borderRadius: 8,
   padding: 12,
-  backgroundColor: "#fafafa",
+  backgroundColor: "rgba(255,255,255,0.06)",
+  color: "#ffffff",
+  colorScheme: "dark",
   fontSize: 14,
   fontFamily: "inherit",
   width: "100%",
@@ -408,14 +423,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
     padding: 20,
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
-  // ===== ここからWeb版専用 =====
+  // ===== ここからWeb版専用（フォームを、1枚のガラスのカードにする） =====
   formWrapper: Platform.select({
     web: {
       flex: 1,
       width: "100%",
       maxWidth: 500,
       alignSelf: "center",
+      padding: 24,
+      borderRadius: 28,
+      overflow: "hidden",
+      ...webGlassBox,
     },
     default: {
       flex: 1,
@@ -427,60 +448,63 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 16,
-    color: "#4a90e2",
+    color: accentColor,
   },
   title: {
     fontSize: 22,
     fontWeight: "bold",
     marginBottom: 6,
     textAlign: "center",
+    color: pick("#ffffff", undefined as any),
   },
   subtitle: {
     fontSize: 12,
-    color: "#999",
+    color: textFaint,
     marginBottom: 20,
     textAlign: "center",
   },
   label: {
     fontSize: 13,
-    color: "#666",
+    color: textSub,
     marginBottom: 6,
     marginTop: 14,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
     borderRadius: 8,
     padding: 12,
-    backgroundColor: "#fafafa",
+    backgroundColor: pick("rgba(255,255,255,0.06)", "#fafafa"),
+    color: pick("#ffffff", undefined as any),
   },
   handleInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
     borderRadius: 8,
-    backgroundColor: "#fafafa",
+    backgroundColor: pick("rgba(255,255,255,0.06)", "#fafafa"),
     paddingLeft: 12,
   },
   atSign: {
     fontSize: 15,
-    color: "#999",
+    color: textFaint,
     marginRight: 2,
   },
   handleInput: {
     flex: 1,
     padding: 12,
     paddingLeft: 0,
+    color: pick("#ffffff", undefined as any),
   },
   hintText: {
     fontSize: 11,
-    color: "#999",
+    color: textFaint,
     marginTop: 4,
   },
   errorText: {
     fontSize: 12,
-    color: "#e74c3c",
+    color: dangerColor,
     marginTop: 4,
   },
   datePickerDoneButton: {
@@ -501,7 +525,7 @@ const styles = StyleSheet.create({
   genderButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: "center",
@@ -509,9 +533,11 @@ const styles = StyleSheet.create({
   genderButtonActive: {
     backgroundColor: "#4a90e2",
     borderColor: "#4a90e2",
+    // ===== Web版：選ばれているものは、浮き上がったガラス =====
+    ...webSelected,
   },
   genderText: {
-    color: "#333",
+    color: pick("rgba(255,255,255,0.75)", "#333"),
   },
   genderTextActive: {
     color: "#fff",
@@ -525,19 +551,21 @@ const styles = StyleSheet.create({
   },
   genreChip: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: "#fafafa",
+    backgroundColor: pick("rgba(255,255,255,0.06)", "#fafafa"),
   },
   genreChipSelected: {
     backgroundColor: "#4a90e2",
     borderColor: "#4a90e2",
+    // ===== Web版：選ばれているものは、浮き上がったガラス =====
+    ...webSelected,
   },
   genreChipText: {
     fontSize: 13,
-    color: "#333",
+    color: pick("rgba(255,255,255,0.75)", "#333"),
   },
   genreChipTextSelected: {
     fontSize: 13,
@@ -557,24 +585,24 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: pick("rgba(255,255,255,0.1)", "#f0f0f0"),
     justifyContent: "center",
     alignItems: "center",
   },
   otherGenreRemoveButtonText: {
     fontSize: 16,
-    color: "#e74c3c",
+    color: dangerColor,
     fontWeight: "700",
   },
   saveButton: {
-    backgroundColor: "#222",
+    backgroundColor: pick("#f4f6ff", "#222"),
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 30,
   },
   saveButtonText: {
-    color: "#fff",
+    color: pick("#1a2050", "#fff"),
     fontWeight: "bold",
     fontSize: 16,
   },

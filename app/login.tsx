@@ -3,17 +3,25 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
+import {
+  accentColor,
+  isWeb,
+  pick,
+  webGlassBox,
+  webScreenBackground,
+  webSoftButton
+} from "../components/glass";
 import { auth } from "../firebaseConfig";
 import { normalizeEmail } from "../utils/emailHelpers";
 
@@ -41,7 +49,7 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* ===== ここからWeb版専用（PC向けに中央寄せ・固定幅にするラッパー） ===== */}
+      {/* ===== ここからWeb版専用（PC向けに中央寄せ・固定幅のガラスのカードにするラッパー） ===== */}
       <View style={styles.formWrapper}>
         {/* ===== ここまでWeb版専用 ===== */}
         <Image
@@ -53,6 +61,7 @@ export default function LoginScreen() {
 
         <TextInput
           placeholder={t("login.emailPlaceholder")}
+          placeholderTextColor={pick("rgba(255,255,255,0.4)", undefined as any)}
           value={email}
           onChangeText={setEmail}
           // ===== 入力欄から離れたタイミングで、見た目にも整えておく =====
@@ -65,6 +74,7 @@ export default function LoginScreen() {
         <View style={styles.passwordWrapper}>
           <TextInput
             placeholder={t("login.passwordPlaceholder")}
+            placeholderTextColor={pick("rgba(255,255,255,0.4)", undefined as any)}
             value={password}
             onChangeText={setPassword}
             style={styles.passwordInput}
@@ -109,13 +119,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 20,
     justifyContent: "center",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
-  // ===== ここからWeb版専用 =====
+  // ===== ここからWeb版専用（フォームを、1枚のガラスのカードにする） =====
   formWrapper: Platform.select({
     web: {
       width: "100%",
       maxWidth: 400,
       alignSelf: "center",
+      padding: 32,
+      borderRadius: 28,
+      ...webGlassBox,
     },
     default: {},
   }),
@@ -125,16 +140,21 @@ const styles = StyleSheet.create({
     height: 64,
     alignSelf: "center",
     marginBottom: 16,
+    // ===== Web版：ロゴが暗い背景に埋もれないよう、明るい角丸の下地を敷く =====
+    ...(isWeb ? ({ backgroundColor: "#f4f6ff", borderRadius: 16 } as any) : {}),
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 30,
     textAlign: "center",
+    color: pick("#ffffff", undefined as any),
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
+    backgroundColor: pick("rgba(255,255,255,0.06)", "transparent"),
+    color: pick("#ffffff", undefined as any),
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
@@ -143,7 +163,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
+    backgroundColor: pick("rgba(255,255,255,0.06)", "transparent"),
     borderRadius: 8,
     marginBottom: 12,
     paddingRight: 12,
@@ -151,26 +172,27 @@ const styles = StyleSheet.create({
   passwordInput: {
     flex: 1,
     padding: 12,
+    color: pick("#ffffff", undefined as any),
   },
   toggleText: {
-    color: "#4a90e2",
+    color: accentColor,
     fontSize: 12,
   },
   forgotPasswordText: {
-    color: "#4a90e2",
+    color: accentColor,
     fontSize: 13,
     textAlign: "right",
     marginBottom: 20,
   },
   loginButton: {
-    backgroundColor: "#222",
+    backgroundColor: pick("#f4f6ff", "#222"),
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",
     marginBottom: 12,
   },
   loginButtonText: {
-    color: "#fff",
+    color: pick("#1a2050", "#fff"),
     fontWeight: "bold",
     fontSize: 16,
   },
@@ -180,9 +202,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#222",
+    ...webSoftButton,
   },
   signupButtonText: {
-    color: "#222",
+    color: pick("#ffffff", "#222"),
     fontWeight: "bold",
     fontSize: 16,
   },

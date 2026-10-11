@@ -4,22 +4,27 @@ import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
+import {
+  accentColor,
+  dangerColor,
+  isWeb,
+  pick,
+  textFaint,
+  webGlassBox,
+  webScreenBackground,
+} from "../components/glass";
 import { auth, db } from "../firebaseConfig";
 import { isValidEmailFormat, normalizeEmail } from "../utils/emailHelpers";
-
-// ===== ここからWeb版専用 =====
-const isWeb = Platform.OS === "web";
-// ===== ここまでWeb版専用 =====
 
 export default function SignupScreen() {
   const { t } = useTranslation();
@@ -88,6 +93,7 @@ export default function SignupScreen() {
 
         <TextInput
           placeholder={t("login.emailPlaceholder")}
+          placeholderTextColor={pick("rgba(255,255,255,0.4)", undefined as any)}
           value={email}
           onChangeText={setEmail}
           // ===== 入力欄から離れたタイミングで、見た目にも整えておく =====
@@ -100,6 +106,7 @@ export default function SignupScreen() {
         <View style={styles.passwordWrapper}>
           <TextInput
             placeholder={t("login.passwordPlaceholder")}
+            placeholderTextColor={pick("rgba(255,255,255,0.4)", undefined as any)}
             value={password}
             onChangeText={setPassword}
             style={styles.passwordInput}
@@ -113,6 +120,7 @@ export default function SignupScreen() {
         <View style={styles.passwordWrapper}>
           <TextInput
             placeholder="パスワード（確認用）"
+            placeholderTextColor={pick("rgba(255,255,255,0.4)", undefined as any)}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             style={styles.passwordInput}
@@ -152,12 +160,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 20,
     justifyContent: "center",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
+  // ===== Web版：フォームを、1枚のガラスのカードにする =====
   formWrapper: Platform.select({
     web: {
       width: "100%",
       maxWidth: 400,
       alignSelf: "center",
+      padding: 32,
+      borderRadius: 28,
+      ...webGlassBox,
     },
     default: {},
   }),
@@ -166,23 +180,26 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 15,
-    color: "#4a90e2",
+    color: accentColor,
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 6,
     textAlign: "center",
+    color: pick("#ffffff", undefined as any),
   },
   subtitle: {
     fontSize: 12,
-    color: "#999",
+    color: textFaint,
     marginBottom: 24,
     textAlign: "center",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
+    backgroundColor: pick("rgba(255,255,255,0.06)", "transparent"),
+    color: pick("#ffffff", undefined as any),
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
@@ -191,7 +208,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.18)", "#ddd"),
+    backgroundColor: pick("rgba(255,255,255,0.06)", "transparent"),
     borderRadius: 8,
     marginBottom: 12,
     paddingRight: 12,
@@ -199,25 +217,26 @@ const styles = StyleSheet.create({
   passwordInput: {
     flex: 1,
     padding: 12,
+    color: pick("#ffffff", undefined as any),
   },
   toggleText: {
-    color: "#4a90e2",
+    color: accentColor,
     fontSize: 12,
   },
   errorText: {
-    color: "#e74c3c",
+    color: dangerColor,
     fontSize: 13,
     marginBottom: 12,
   },
   signupButton: {
-    backgroundColor: "#222",
+    backgroundColor: pick("#f4f6ff", "#222"),
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 8,
   },
   signupButtonText: {
-    color: "#fff",
+    color: pick("#1a2050", "#fff"),
     fontWeight: "bold",
     fontSize: 16,
   },
