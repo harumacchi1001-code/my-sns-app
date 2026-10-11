@@ -4,18 +4,24 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
-    Alert,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  dangerColor,
+  isWeb,
+  pick,
+  textMain,
+  webGlassBox,
+  webScreenBackground,
+} from "../components/glass";
 import { auth, db } from "../firebaseConfig";
-
-const isWeb = Platform.OS === "web";
 
 // ===== 設定画面：プロフィール画面の三本線メニューの中身を、独立ページ化したもの =====
 type MenuItem = {
@@ -102,31 +108,41 @@ export default function SettingsScreen() {
           <Text style={styles.headerTitle}>設定</Text>
         </View>
         <ScrollView contentContainerStyle={styles.listContent}>
-          {menuItems.map((item) => (
-            <TouchableOpacity
-              key={item.key}
-              style={styles.menuItem}
-              onPress={() => router.push(item.path as any)}
-            >
-              <MaterialIcons name={item.icon} size={22} color="#333" />
-              <Text style={styles.menuItemText}>{item.label}</Text>
-              {!!item.badgeCount && item.badgeCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {item.badgeCount > 99 ? "99+" : item.badgeCount}
-                  </Text>
-                </View>
-              )}
-              <MaterialIcons name="chevron-right" size={20} color="#ccc" />
-            </TouchableOpacity>
-          ))}
+          {/* ===== Web版：メニューを、1枚のガラスのカードにまとめる（スマホでは枠なし） ===== */}
+          <View style={styles.menuCard}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.menuItem, isWeb && index === menuItems.length - 1 && styles.menuItemLast]}
+                onPress={() => router.push(item.path as any)}
+              >
+                <MaterialIcons name={item.icon} size={22} color={pick("#ffffff", "#333")} />
+                <Text style={styles.menuItemText}>{item.label}</Text>
+                {!!item.badgeCount && item.badgeCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {item.badgeCount > 99 ? "99+" : item.badgeCount}
+                    </Text>
+                  </View>
+                )}
+                <MaterialIcons
+                  name="chevron-right"
+                  size={20}
+                  color={pick("rgba(255,255,255,0.35)", "#ccc")}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <View style={styles.divider} />
 
-          <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-            <MaterialIcons name="logout" size={22} color="#e74c3c" />
-            <Text style={[styles.menuItemText, { color: "#e74c3c" }]}>ログアウト</Text>
-          </TouchableOpacity>
+          {/* ===== ログアウトは、別のガラスのカード ===== */}
+          <View style={styles.menuCard}>
+            <TouchableOpacity style={[styles.menuItem, isWeb && styles.menuItemLast]} onPress={handleLogout}>
+              <MaterialIcons name="logout" size={22} color={dangerColor} />
+              <Text style={[styles.menuItemText, { color: dangerColor }]}>ログアウト</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -137,6 +153,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
   pageWrapper: Platform.select({
     web: {
@@ -152,29 +170,42 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: pick(0, 0.5),
     borderBottomColor: "#eee",
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#222",
+    color: textMain,
   },
   listContent: {
     paddingVertical: 8,
+    ...(isWeb ? { paddingHorizontal: 12 } : {}),
   },
+  // ===== メニューをまとめる箱：Web版はガラスのカード =====
+  menuCard: isWeb
+    ? ({
+        ...webGlassBox,
+        borderRadius: 28,
+        overflow: "hidden",
+      } as any)
+    : {},
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#f2f2f2",
+    borderBottomWidth: pick(1, 0.5),
+    borderBottomColor: pick("rgba(255,255,255,0.08)", "#f2f2f2"),
+  },
+  // カードの、いちばん下の項目は、区切り線を出さない（Web版のみ）
+  menuItemLast: {
+    borderBottomWidth: 0,
   },
   menuItemText: {
     fontSize: 15,
-    color: "#333",
+    color: pick("#ffffff", "#333"),
     flex: 1,
   },
   badge: {
@@ -192,9 +223,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
   },
+  // 区切り：Web版は透明なすき間、スマホは今までの薄い灰色の帯
   divider: {
-    height: 8,
-    backgroundColor: "#f7f7f7",
-    marginVertical: 8,
+    height: pick(16, 8),
+    backgroundColor: pick("transparent", "#f7f7f7"),
+    marginVertical: pick(0, 8),
   },
 });

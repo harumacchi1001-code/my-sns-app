@@ -1,31 +1,37 @@
 import { useRouter } from "expo-router";
-import { collection, DocumentData, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, DocumentData, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  accentColor,
+  isWeb,
+  pick,
+  textFaint,
+  textMain,
+  textSub,
+  webGlassBox,
+  webScreenBackground,
+} from "../components/glass";
 import { auth, db } from "../firebaseConfig";
 
-type Post = DocumentData & { id: string };
+type Comment = DocumentData & { id: string };
 
-// ===== ここからWeb版専用 =====
-const isWeb = Platform.OS === "web";
-const GRID_COLUMNS = isWeb ? 5 : 2;
-// ===== ここまでWeb版専用 =====
-
-export default function SavedPostsScreen() {
+export default function CommentHistoryScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [postMap, setPostMap] = useState<Record<string, DocumentData>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,26 +39,46 @@ export default function SavedPostsScreen() {
     if (!myEmail) return;
 
     const q = query(
-      collection(db, "posts"),
-      where("savedBy", "array-contains", myEmail)
+      collection(db, "comments"),
+      where("authorEmail", "==", myEmail),
+      orderBy("createdAt", "desc")
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
-      })) as Post[];
-      setPosts(data);
+      })) as Comment[];
+      setComments(data);
       setLoading(false);
     });
 
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    const postIds = Array.from(new Set(comments.map((c) => c.postId)));
+    const idsToFetch = postIds.filter((pid) => pid && !postMap[pid]);
+
+    idsToFetch.forEach((postId) => {
+      onSnapshot(doc(db, "posts", postId), (docSnap) => {
+        if (docSnap.exists()) {
+          setPostMap((prev) => ({ ...prev, [postId]: { id: docSnap.id, ...docSnap.data() } }));
+        }
+      });
+    });
+  }, [comments]);
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp?.toDate) return "";
+    const date = timestamp.toDate();
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={pick("#ffffff", undefined as any)} />
       </View>
     );
   }
@@ -62,43 +88,45 @@ export default function SavedPostsScreen() {
       <View style={styles.pageWrapper}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backText}>{t("savedPosts.backButton")}</Text>
+            <Text style={styles.backText}>{t("commentHistory.backButton")}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("savedPosts.headerTitle")}</Text>
+          <Text style={styles.headerTitle}>{t("commentHistory.headerTitle")}</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <FlatList
-          data={posts}
+          data={comments}
           keyExtractor={(item) => item.id}
-          numColumns={GRID_COLUMNS}
-          columnWrapperStyle={styles.row}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.centerContainer}>
-              <Text style={styles.emptyText}>{t("savedPosts.empty")}</Text>
+              <Text style={styles.emptyText}>{t("commentHistory.empty")}</Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => router.push({ pathname: "/post/[id]", params: { id: item.id } })}
-            >
-              <View style={styles.thumbnailWrapper}>
-                {item.thumbnailUrl ? (
-                  <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+          renderItem={({ item }) => {
+            const post = postMap[item.postId];
+            return (
+              <TouchableOpacity
+                style={styles.commentRow}
+                onPress={() => router.push({ pathname: "/post/[id]", params: { id: item.postId } })}
+              >
+                {post?.thumbnailUrl ? (
+                  <Image source={{ uri: post.thumbnailUrl }} style={styles.thumbnail} />
                 ) : (
                   <View style={styles.thumbnailPlaceholder} />
                 )}
-              </View>
-              <View style={styles.cardBody}>
-                <Text style={styles.title} numberOfLines={1}>
-                  {item.title || t("savedPosts.noTitle")}
-                </Text>
-                <Text style={styles.metaText}>♥ {item.likedBy?.length || 0}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
+                <View style={styles.commentInfo}>
+                  <Text style={styles.postTitle} numberOfLines={1}>
+                    {post?.title || t("commentHistory.postFallback")}
+                  </Text>
+                  <Text style={styles.commentText} numberOfLines={2}>
+                    {item.text}
+                  </Text>
+                  <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
         />
       </View>
     </SafeAreaView>
@@ -109,13 +137,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
   // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
     web: {
       flex: 1,
       width: "100%",
-      maxWidth: 1000,
+      maxWidth: 630,
       alignSelf: "center",
     },
     default: {
@@ -130,7 +160,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#999",
+    color: textFaint,
     fontSize: 14,
   },
   header: {
@@ -139,65 +169,65 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: pick(0, 0.5),
     borderBottomColor: "#eee",
   },
   backText: {
-    color: "#4a90e2",
+    color: accentColor,
     fontSize: 15,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",
+    color: textMain,
   },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 20,
-  },
-  // ===== ここからWeb版専用 =====
-  row: {
-    justifyContent: isWeb ? "flex-start" : "space-between",
-    gap: isWeb ? 12 : 0,
-    marginBottom: 10,
-  },
-  // ===== ここまでWeb版専用 =====
-  // ===== ここからWeb版専用 =====
-  card: {
-    width: isWeb ? "18.4%" : "48%",
-    borderWidth: 1.5,
-    borderColor: "#000",
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#fff",
-  },
-  // ===== ここまでWeb版専用 =====
-  thumbnailWrapper: {
-    width: "100%",
-    aspectRatio: 16 / 9,
-    backgroundColor: "#f0f0f0",
+  // ===== Web版：コメントのカードを、少し内側に寄せて、間をあける =====
+  listContent: isWeb ? { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 20 } : {},
+  // ===== コメント1件：Web版はガラスのカード、スマホは今までの下線 =====
+  commentRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#f0f0f0",
+    ...(isWeb
+      ? ({
+          ...webGlassBox,
+          borderRadius: 20,
+          marginBottom: 10,
+        } as any)
+      : {}),
   },
   thumbnail: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: pick("rgba(255,255,255,0.08)", "#f0f0f0"),
   },
   thumbnailPlaceholder: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#eee",
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: pick("rgba(255,255,255,0.08)", "#eee"),
   },
-  cardBody: {
-    padding: 8,
+  commentInfo: {
+    flex: 1,
   },
-  title: {
+  postTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#222",
-    marginBottom: 6,
+    color: textSub,
+    marginBottom: 4,
   },
-  metaText: {
+  commentText: {
+    fontSize: 14,
+    color: textMain,
+    marginBottom: 4,
+  },
+  date: {
     fontSize: 11,
-    color: "#666",
+    color: textFaint,
   },
 });

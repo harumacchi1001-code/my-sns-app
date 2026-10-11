@@ -3,16 +3,26 @@ import { collection, doc, DocumentData, onSnapshot, orderBy, query, where } from
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  accentColor,
+  isWeb,
+  pick,
+  textFaint,
+  textMain,
+  textSub,
+  webGlassBox,
+  webScreenBackground,
+} from "../components/glass";
 import { auth, db } from "../firebaseConfig";
 
 type Comment = DocumentData & { id: string };
@@ -68,7 +78,7 @@ export default function CommentHistoryScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={pick("#ffffff", undefined as any)} />
       </View>
     );
   }
@@ -87,6 +97,7 @@ export default function CommentHistoryScreen() {
         <FlatList
           data={comments}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Text style={styles.emptyText}>{t("commentHistory.empty")}</Text>
@@ -126,6 +137,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
   // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
@@ -147,7 +160,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#999",
+    color: textFaint,
     fontSize: 14,
   },
   header: {
@@ -156,37 +169,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: pick(0, 0.5),
     borderBottomColor: "#eee",
   },
   backText: {
-    color: "#4a90e2",
+    color: accentColor,
     fontSize: 15,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",
+    color: textMain,
   },
+  // ===== Web版：コメントのカードを、少し内側に寄せて、間をあける =====
+  listContent: isWeb ? { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 20 } : {},
+  // ===== コメント1件：Web版はガラスのカード、スマホは今までの下線 =====
   commentRow: {
     flexDirection: "row",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 0.5,
     borderBottomColor: "#f0f0f0",
+    ...(isWeb
+      ? ({
+          ...webGlassBox,
+          borderRadius: 20,
+          marginBottom: 10,
+        } as any)
+      : {}),
   },
   thumbnail: {
     width: 60,
     height: 60,
     borderRadius: 8,
     marginRight: 12,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: pick("rgba(255,255,255,0.08)", "#f0f0f0"),
   },
   thumbnailPlaceholder: {
     width: 60,
     height: 60,
     borderRadius: 8,
     marginRight: 12,
-    backgroundColor: "#eee",
+    backgroundColor: pick("rgba(255,255,255,0.08)", "#eee"),
   },
   commentInfo: {
     flex: 1,
@@ -194,16 +218,16 @@ const styles = StyleSheet.create({
   postTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#666",
+    color: textSub,
     marginBottom: 4,
   },
   commentText: {
     fontSize: 14,
-    color: "#222",
+    color: textMain,
     marginBottom: 4,
   },
   date: {
     fontSize: 11,
-    color: "#999",
+    color: textFaint,
   },
 });

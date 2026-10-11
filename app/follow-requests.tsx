@@ -3,16 +3,26 @@ import { arrayRemove, arrayUnion, collection, doc, DocumentData, onSnapshot, upd
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  accentColor,
+  isWeb,
+  pick,
+  textFaint,
+  textMain,
+  webGlassBox,
+  webScreenBackground,
+  webSoftButton,
+} from "../components/glass";
 import { auth, db } from "../firebaseConfig";
 
 type UserItem = DocumentData & { id: string };
@@ -77,7 +87,7 @@ export default function FollowRequestsScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={pick("#ffffff", undefined as any)} />
       </View>
     );
   }
@@ -96,6 +106,7 @@ export default function FollowRequestsScreen() {
         <FlatList
           data={requesters}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Text style={styles.emptyText}>{t("followRequests.empty")}</Text>
@@ -143,6 +154,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
   // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
@@ -164,7 +177,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#999",
+    color: textFaint,
     fontSize: 14,
   },
   header: {
@@ -173,17 +186,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: pick(0, 0.5),
     borderBottomColor: "#eee",
   },
   backText: {
-    color: "#4a90e2",
+    color: accentColor,
     fontSize: 15,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",
+    color: textMain,
   },
+  // ===== Web版：リクエストのカードを、少し内側に寄せて、間をあける =====
+  listContent: isWeb ? { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 20 } : {},
+  // ===== リクエスト1件：Web版はガラスのカード、スマホは今までの下線 =====
   requestRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -192,6 +209,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 0.5,
     borderBottomColor: "#f0f0f0",
+    ...(isWeb
+      ? ({
+          ...webGlassBox,
+          borderRadius: 20,
+          marginBottom: 10,
+        } as any)
+      : {}),
   },
   userInfo: {
     flexDirection: "row",
@@ -203,14 +227,14 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     marginRight: 12,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: pick("rgba(255,255,255,0.1)", "#f0f0f0"),
   },
   avatarPlaceholder: {
     width: 44,
     height: 44,
     borderRadius: 22,
     marginRight: 12,
-    backgroundColor: "#eee",
+    backgroundColor: pick("rgba(255,255,255,0.1)", "#eee"),
     justifyContent: "center",
     alignItems: "center",
   },
@@ -220,31 +244,43 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 15,
     fontWeight: "500",
+    color: textMain,
   },
   buttonRow: {
     flexDirection: "row",
     gap: 8,
   },
+  // 承認ボタン：Web版は丸い青紫のガラス
   approveButton: {
     backgroundColor: "#4a90e2",
-    borderRadius: 6,
+    borderRadius: pick(16, 6),
     paddingHorizontal: 14,
     paddingVertical: 7,
+    ...(isWeb
+      ? ({
+          backgroundColor: "rgba(110,140,255,0.55)",
+          borderWidth: 1,
+          borderColor: "rgba(255,255,255,0.25)",
+          boxShadow: "0 3px 10px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.3)",
+        } as any)
+      : {}),
   },
   approveButtonText: {
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
   },
+  // 拒否ボタン：Web版は薄いガラスの丸いボタン
   declineButton: {
     borderWidth: 1,
     borderColor: "#ddd",
-    borderRadius: 6,
+    borderRadius: pick(16, 6),
     paddingHorizontal: 14,
     paddingVertical: 7,
+    ...(isWeb ? ({ ...webSoftButton } as any) : {}),
   },
   declineButtonText: {
-    color: "#666",
+    color: pick("rgba(255,255,255,0.8)", "#666"),
     fontSize: 12,
     fontWeight: "600",
   },

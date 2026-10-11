@@ -21,13 +21,25 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import CardsIcon from "../../components/CardsIcon";
 import StampFrame from "../../components/StampFrame";
+import {
+  accentColor,
+  isWeb,
+  pick,
+  textFaint,
+  textMain,
+  webGlassBox,
+  webScreenBackground,
+  webSelected
+} from "../../components/glass";
 import { auth, db } from "../../firebaseConfig";
+
 type UserItem = {
   id: string;
   username?: string;
   handle?: string;
   photoUrl?: string;
 };
+
 type PostItem = {
   id: string;
   title?: string;
@@ -36,6 +48,7 @@ type PostItem = {
   hashtags?: string[];
   authorEmail?: string;
 };
+
 type NookItem = {
   id: string;
   name?: string;
@@ -45,18 +58,23 @@ type NookItem = {
   memberCount?: number;
   memberLimit?: number;
 };
+
 // ===== ハッシュタグの候補（タグ名＋件数） =====
 type HashtagCandidate = {
   tag: string;
   count: number;
 };
+
 // ===== アカウント／投稿／タグ／Nookの、4つのタブ =====
 const TABS = ["user", "post", "hashtag", "nook"] as const;
 type TabMode = (typeof TABS)[number];
+
 const DAY_MS = 24 * 60 * 60 * 1000;
-// ===== ここからWeb版専用 =====
-const isWeb = Platform.OS === "web";
-// ===== ここまでWeb版専用 =====
+
+// ===== Web版（暗い背景）用の、アイコンの色 =====
+const chevronColor = pick("rgba(255,255,255,0.35)", "#ccc");
+const softIconColor = pick("rgba(255,255,255,0.6)", "#bbb");
+
 // ===== 投稿のハッシュタグから、検索ワードを含む候補を、件数付きで集計する =====
 const getHashtagCandidates = (allPosts: PostItem[], text: string): HashtagCandidate[] => {
   const keyword = text.trim().toLowerCase();
@@ -73,6 +91,7 @@ const getHashtagCandidates = (allPosts: PostItem[], text: string): HashtagCandid
     .map((tag) => ({ tag, count: counts[tag] }))
     .sort((a, b) => b.count - a.count);
 };
+
 export default function SearchScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -83,20 +102,25 @@ export default function SearchScreen() {
   const [posts, setPosts] = useState<PostItem[]>([]);
   const [nooks, setNooks] = useState<NookItem[]>([]);
   const [loading, setLoading] = useState(true);
+
   // ===== 発見（ユーザー／投稿を選ぶ）中央カードメニューの、表示状態 =====
   const [discoverMenuVisible, setDiscoverMenuVisible] = useState(false);
+
   // ===== 横スワイプで、4タブを切り替えるための状態 =====
   const scrollRef = useRef<ScrollView>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   // ===== スワイプ中の位置を、なめらかに追いかける、下線用のアニメーション値 =====
   const scrollX = useRef(new Animated.Value(0)).current;
+
   // ===== ストーリー関連の状態 =====
   const [stories, setStories] = useState<DocumentData[]>([]);
+
   useEffect(() => {
     if (initialTag) {
       setSearchText(initialTag);
     }
   }, [initialTag]);
+
   // ===== initialTagがある場合は、containerWidthが確定した後に、タグタブへスワイプ移動する =====
   useEffect(() => {
     if (initialTag && containerWidth > 0) {
@@ -105,6 +129,7 @@ export default function SearchScreen() {
       scrollX.setValue(containerWidth * 2);
     }
   }, [initialTag, containerWidth]);
+
   useEffect(() => {
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const data = snapshot.docs
@@ -112,6 +137,7 @@ export default function SearchScreen() {
         .filter((u) => u.id !== auth.currentUser?.uid) as UserItem[];
       setUsers(data);
     });
+
     const q = query(collection(db, "posts"), where("status", "==", "published"));
     const unsubscribePosts = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
@@ -121,6 +147,7 @@ export default function SearchScreen() {
       setPosts(data);
       setLoading(false);
     });
+
     // ===== ストーリー一覧を取得 =====
     const unsubscribeStories = onSnapshot(collection(db, "stories"), (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
@@ -129,6 +156,7 @@ export default function SearchScreen() {
       }));
       setStories(data);
     });
+
     // ===== 公開Nookの一覧を取得 =====
     const gq = query(collection(db, "nooks"), where("isPublic", "==", true));
     const unsubscribeNooks = onSnapshot(gq, (snapshot) => {
@@ -136,6 +164,7 @@ export default function SearchScreen() {
       data.sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
       setNooks(data);
     });
+
     return () => {
       unsubscribeUsers();
       unsubscribePosts();
@@ -143,6 +172,7 @@ export default function SearchScreen() {
       unsubscribeNooks();
     };
   }, []);
+
   // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
   const getUserStories = (userId: string) => {
     const now = Date.now();
@@ -152,7 +182,9 @@ export default function SearchScreen() {
       return now - createdMs < DAY_MS;
     });
   };
+
   const myUid = auth.currentUser?.uid;
+
   // ===== 検索結果の、ユーザーアイコンをタップしたときの動作 =====
   const handleUserAvatarPress = (userId: string) => {
     const userStories = getUserStories(userId);
@@ -162,6 +194,7 @@ export default function SearchScreen() {
       router.push({ pathname: "/user/[id]", params: { id: userId } });
     }
   };
+
   const filteredUsers = searchText.trim()
     ? users.filter((u) => {
         const text = searchText.toLowerCase();
@@ -170,6 +203,7 @@ export default function SearchScreen() {
         return username.includes(text) || handle.includes(text);
       })
     : [];
+
   // ===== 「投稿」タブ：タイトル・ハッシュタグの、両方を検索対象にする =====
   const filteredPosts = posts.filter((p) => {
     const text = searchText.toLowerCase();
@@ -177,8 +211,10 @@ export default function SearchScreen() {
     const hashtagMatch = (p.hashtags || []).some((tag) => tag.toLowerCase().includes(text));
     return titleMatch || hashtagMatch;
   });
+
   // ===== 「タグ」タブ：ハッシュタグ名の候補（件数付き） =====
   const hashtagCandidates = getHashtagCandidates(posts, searchText);
+
   // ===== 「Nook」タブ：Nook名・説明文で、絞り込む =====
   const filteredNooks = searchText.trim()
     ? nooks.filter((n) => {
@@ -188,55 +224,65 @@ export default function SearchScreen() {
         return name.includes(text) || description.includes(text);
       })
     : nooks;
+
   // ===== ハッシュタグ候補をタップしたら、新しい検索画面を、重ねて開く =====
   const handleSelectHashtagCandidate = (tag: string) => {
     router.push(`/hashtag-search/${encodeURIComponent(tag)}` as any);
   };
+
   // ===== タブをタップしたときに、該当ページへスワイプ移動する =====
   const handleTabPress = (index: number) => {
     setMode(TABS[index]);
     scrollRef.current?.scrollTo({ x: containerWidth * index, animated: true });
   };
+
   // ===== 手でスワイプし終えたときに、選択中のタブを更新する（見出しの太字表示などに使う） =====
   const handleMomentumScrollEnd = (e: any) => {
     if (containerWidth === 0) return;
     const page = Math.round(e.nativeEvent.contentOffset.x / containerWidth);
     setMode(TABS[Math.max(0, Math.min(page, TABS.length - 1))]);
   };
+
   // ===== スワイプ中、常に呼ばれる。下線の位置を、リアルタイムに更新する =====
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
     { useNativeDriver: false }
   );
+
   const getTabLabel = (key: TabMode) => {
     if (key === "user") return t("search.modeUser");
     if (key === "post") return t("search.modePost");
     if (key === "hashtag") return t("search.modeHashtag");
     return "Nook";
   };
+
   const getPlaceholder = () => {
     if (mode === "user") return t("search.placeholderUser");
     if (mode === "post") return t("search.placeholderPost");
     if (mode === "hashtag") return t("search.placeholderHashtag");
     return "Nookを検索";
   };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={pick("#ffffff", undefined as any)} />
       </View>
     );
   }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
         <Text style={styles.header}>{t("search.title")}</Text>
+
         {/* ===== 検索バー（常時表示）＋発見アイコン ===== */}
         <View style={styles.searchBarRow}>
           <View style={styles.searchInputWrapper}>
-            <MaterialIcons name="search" size={18} color="#999" />
+            <MaterialIcons name="search" size={18} color={textFaint} />
             <TextInput
               placeholder={getPlaceholder()}
+              placeholderTextColor={pick("rgba(255,255,255,0.4)", undefined as any)}
               value={searchText}
               onChangeText={setSearchText}
               style={styles.searchInputField}
@@ -247,15 +293,16 @@ export default function SearchScreen() {
             style={styles.discoverIconButton}
             onPress={() => setDiscoverMenuVisible(true)}
           >
-            <CardsIcon size={20} color="#333" />
+            <CardsIcon size={20} color={pick("#ffffff", "#333")} />
           </TouchableOpacity>
         </View>
-        {/* ===== アカウント／投稿／タグ／グループ：下線タブ ===== */}
+
+        {/* ===== アカウント／投稿／タグ／Nook：Web版はガラスのカプセル、スマホは下線タブ ===== */}
         <View style={styles.tabsRow}>
           {TABS.map((key, index) => (
             <TouchableOpacity
               key={key}
-              style={styles.tabItem}
+              style={[styles.tabItem, isWeb && mode === key && styles.tabItemActive]}
               onPress={() => handleTabPress(index)}
             >
               <Text style={mode === key ? styles.tabTextActive : styles.tabText}>
@@ -263,8 +310,8 @@ export default function SearchScreen() {
               </Text>
             </TouchableOpacity>
           ))}
-          {/* ===== スワイプに合わせて、なめらかに動く、1本の下線 ===== */}
-          {containerWidth > 0 && (
+          {/* ===== スワイプに合わせて、なめらかに動く、1本の下線（スマホのみ） ===== */}
+          {!isWeb && containerWidth > 0 && (
             <Animated.View
               style={[
                 styles.tabUnderlineMoving,
@@ -284,6 +331,7 @@ export default function SearchScreen() {
             />
           )}
         </View>
+
         {/* ===== 横スワイプで切り替わる、4つの結果ページ ===== */}
         <View
           style={styles.swipeContainer}
@@ -344,6 +392,7 @@ export default function SearchScreen() {
                   }}
                 />
               </View>
+
               {/* ===== 投稿：横並びリスト（16:9サムネイル＋タイトル全文＋ハッシュタグ全部） ===== */}
               <View style={[styles.tabPage, { width: containerWidth }]}>
                 <FlatList
@@ -368,7 +417,7 @@ export default function SearchScreen() {
                             resizeMode="contain"
                           />
                         ) : (
-                          <MaterialIcons name="image" size={20} color="#ccc" />
+                          <MaterialIcons name="image" size={20} color={chevronColor} />
                         )}
                       </View>
                       <View style={styles.postListTextWrapper}>
@@ -385,11 +434,12 @@ export default function SearchScreen() {
                           </View>
                         )}
                       </View>
-                      <MaterialIcons name="chevron-right" size={20} color="#ccc" />
+                      <MaterialIcons name="chevron-right" size={20} color={chevronColor} />
                     </TouchableOpacity>
                   )}
                 />
               </View>
+
               {/* ===== タグ：ハッシュタグ候補の一覧（投稿ではない） ===== */}
               <View style={[styles.tabPage, { width: containerWidth }]}>
                 <FlatList
@@ -415,11 +465,12 @@ export default function SearchScreen() {
                         <Text style={styles.hashtagCandidateTag}>#{item.tag}</Text>
                         <Text style={styles.hashtagCandidateCount}>投稿 {item.count}件</Text>
                       </View>
-                      <MaterialIcons name="chevron-right" size={20} color="#ccc" />
+                      <MaterialIcons name="chevron-right" size={20} color={chevronColor} />
                     </TouchableOpacity>
                   )}
                 />
               </View>
+
               {/* ===== Nook：公開Nookの一覧（検索文字があれば絞り込み） ===== */}
               <View style={[styles.tabPage, { width: containerWidth }]}>
                 <FlatList
@@ -444,7 +495,7 @@ export default function SearchScreen() {
                           {item.iconUrl ? (
                             <Image source={{ uri: item.iconUrl }} style={styles.groupIconSmall} />
                           ) : (
-                            <MaterialIcons name="groups" size={22} color="#bbb" />
+                            <MaterialIcons name="groups" size={22} color={softIconColor} />
                           )}
                         </View>
                         <View style={{ flex: 1 }}>
@@ -463,7 +514,7 @@ export default function SearchScreen() {
                             {item.description ? ` ・ ${item.description}` : ""}
                           </Text>
                         </View>
-                        <MaterialIcons name="chevron-right" size={20} color="#ccc" />
+                        <MaterialIcons name="chevron-right" size={20} color={chevronColor} />
                       </TouchableOpacity>
                     );
                   }}
@@ -473,6 +524,7 @@ export default function SearchScreen() {
           )}
         </View>
       </View>
+
       {/* ===== 発見（ユーザー／投稿を選ぶ）中央カードメニュー ===== */}
       <Modal
         visible={discoverMenuVisible}
@@ -488,7 +540,7 @@ export default function SearchScreen() {
                   style={styles.discoverMenuCloseButton}
                   onPress={() => setDiscoverMenuVisible(false)}
                 >
-                  <MaterialIcons name="close" size={22} color="#999" />
+                  <MaterialIcons name="close" size={22} color={textFaint} />
                 </TouchableOpacity>
                 <Text style={styles.discoverMenuCardTitle}>発見</Text>
                 <TouchableOpacity
@@ -498,7 +550,7 @@ export default function SearchScreen() {
                     router.push("/discover-users");
                   }}
                 >
-                  <MaterialIcons name="people-outline" size={22} color="#4a90e2" />
+                  <MaterialIcons name="people-outline" size={22} color={accentColor} />
                   <Text style={styles.discoverMenuItemText}>ユーザーで探す</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -508,7 +560,7 @@ export default function SearchScreen() {
                     router.push("/discover-posts");
                   }}
                 >
-                  <MaterialIcons name="photo-library" size={22} color="#e74c3c" />
+                  <MaterialIcons name="photo-library" size={22} color={pick("#ff7a7a", "#e74c3c")} />
                   <Text style={styles.discoverMenuItemText}>投稿で探す</Text>
                 </TouchableOpacity>
               </View>
@@ -519,10 +571,18 @@ export default function SearchScreen() {
     </SafeAreaView>
   );
 }
+
+// ===== Web版：一覧の1行を、ガラスのカードにする（スマホでは今までの下線のまま） =====
+const webRowCard: any = isWeb
+  ? { ...webGlassBox, borderRadius: 20, paddingHorizontal: 14, marginBottom: 10 }
+  : {};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
   // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
@@ -544,7 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#999",
+    color: textFaint,
     fontSize: 14,
     textAlign: "center",
     paddingHorizontal: 20,
@@ -553,7 +613,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: pick(32, 50),
+    color: textMain,
   },
   // ===== 検索バー・発見アイコンのスタイル =====
   searchBarRow: {
@@ -569,46 +630,69 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "#fafafa",
+    borderColor: pick("rgba(255,255,255,0.14)", "#ddd"),
+    borderRadius: pick(22, 10),
+    paddingHorizontal: pick(16, 12),
+    backgroundColor: pick("rgba(255,255,255,0.06)", "#fafafa"),
   },
   searchInputField: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: pick(12, 10),
     fontSize: 14,
+    color: textMain,
+    ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
   },
   discoverIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: pick(44, 40),
+    height: pick(44, 40),
+    borderRadius: pick(22, 10),
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: pick("rgba(255,255,255,0.14)", "#ddd"),
     justifyContent: "center",
     alignItems: "center",
+    ...(isWeb ? { backgroundColor: "rgba(255,255,255,0.06)" } : {}),
   },
-  // ===== 下線タブのスタイル =====
-  tabsRow: {
-    flexDirection: "row",
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
-    marginTop: 14,
-    position: "relative",
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: "center",
-    paddingBottom: 10,
-  },
+  // ===== タブのスタイル：Web版はガラスのカプセル、スマホは下線 =====
+  tabsRow: isWeb
+    ? ({
+        flexDirection: "row",
+        gap: 4,
+        padding: 5,
+        marginHorizontal: 16,
+        marginTop: 14,
+        borderRadius: 26,
+        position: "relative",
+        ...webGlassBox,
+      } as any)
+    : {
+        flexDirection: "row",
+        borderBottomWidth: 0.5,
+        borderBottomColor: "#eee",
+        marginTop: 14,
+        position: "relative",
+      },
+  tabItem: isWeb
+    ? ({
+        flex: 1,
+        alignItems: "center",
+        paddingVertical: 9,
+        borderRadius: 17,
+        transition: "all 0.18s ease",
+      } as any)
+    : {
+        flex: 1,
+        alignItems: "center",
+        paddingBottom: 10,
+      },
+  tabItemActive: isWeb ? ({ ...webSelected } as any) : {},
   tabText: {
     fontSize: 13,
-    color: "#999",
+    color: pick("rgba(255,255,255,0.6)", "#999"),
   },
   tabTextActive: {
     fontSize: 13,
-    color: "#222",
-    fontWeight: "600",
+    color: textMain,
+    fontWeight: pick("700", "600") as any,
   },
   tabUnderlineMoving: {
     position: "absolute",
@@ -631,6 +715,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 12,
+    ...(isWeb ? ({ ...webRowCard, paddingVertical: 10 } as any) : {}),
   },
   userTextWrapper: {
     flex: 1,
@@ -638,10 +723,11 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 15,
     fontWeight: "500",
+    color: textMain,
   },
   handle: {
     fontSize: 12,
-    color: "#999",
+    color: textFaint,
     marginTop: 2,
   },
   listContent: {
@@ -657,14 +743,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 0.5,
     borderBottomColor: "#f0f0f0",
+    ...(isWeb ? ({ ...webRowCard, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" } as any) : {}),
   },
   postListThumbnailWrapper: {
     width: 90,
     aspectRatio: 16 / 9,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#eee",
-    backgroundColor: "#fafafa",
+    borderColor: pick("rgba(255,255,255,0.12)", "#eee"),
+    backgroundColor: pick("rgba(255,255,255,0.06)", "#fafafa"),
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -679,7 +766,7 @@ const styles = StyleSheet.create({
   postListTitle: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#222",
+    color: textMain,
     lineHeight: 19,
     marginBottom: 5,
   },
@@ -691,7 +778,7 @@ const styles = StyleSheet.create({
   },
   postListHashtagChip: {
     fontSize: 11,
-    color: "#4a90e2",
+    color: accentColor,
   },
   // ===== タグ：ハッシュタグ候補一覧のスタイル =====
   hashtagCandidateRow: {
@@ -701,19 +788,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 0.5,
     borderBottomColor: "#f0f0f0",
+    ...(isWeb ? ({ ...webRowCard, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" } as any) : {}),
   },
   hashtagCandidateIconWrapper: {
     width: 40,
     height: 40,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: pick("rgba(255,255,255,0.18)", "#eee"),
     justifyContent: "center",
     alignItems: "center",
   },
   hashtagCandidateIconText: {
     fontSize: 16,
-    color: "#666",
+    color: pick("rgba(255,255,255,0.7)", "#666"),
     fontWeight: "600",
   },
   hashtagCandidateTextWrapper: {
@@ -722,11 +810,11 @@ const styles = StyleSheet.create({
   hashtagCandidateTag: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#222",
+    color: textMain,
   },
   hashtagCandidateCount: {
     fontSize: 12,
-    color: "#999",
+    color: textFaint,
     marginTop: 2,
   },
   // ===== グループ：一覧のスタイル =====
@@ -759,14 +847,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 0.5,
     borderBottomColor: "#f0f0f0",
+    ...(isWeb ? ({ ...webRowCard, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)" } as any) : {}),
   },
   groupIconWrapperSmall: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#f7f7f7",
+    backgroundColor: pick("rgba(255,255,255,0.08)", "#f7f7f7"),
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: pick("rgba(255,255,255,0.12)", "#eee"),
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
@@ -778,22 +867,22 @@ const styles = StyleSheet.create({
   groupRowName: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#222",
+    color: textMain,
   },
   groupRowMeta: {
     fontSize: 12,
-    color: "#999",
+    color: textFaint,
     marginTop: 2,
   },
   fullBadge: {
-    backgroundColor: "#fdecea",
+    backgroundColor: pick("rgba(231,76,60,0.2)", "#fdecea"),
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   fullBadgeText: {
     fontSize: 10,
-    color: "#c0392b",
+    color: pick("#ff9a8f", "#c0392b"),
     fontWeight: "600",
   },
   // ===== 発見メニュー：画面中央のカード形式のスタイル =====
@@ -806,11 +895,19 @@ const styles = StyleSheet.create({
   discoverMenuCard: {
     width: "80%",
     maxWidth: 320,
-    backgroundColor: "#fff",
-    borderRadius: 16,
+    backgroundColor: pick("rgba(24,26,44,0.92)", "#fff"),
+    borderRadius: pick(28, 16),
     paddingTop: 20,
     paddingBottom: 12,
     paddingHorizontal: 20,
+    ...(isWeb
+      ? ({
+          borderWidth: 1,
+          borderColor: "rgba(255,255,255,0.14)",
+          backdropFilter: "blur(24px) saturate(180%)",
+          boxShadow: "0 12px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12)",
+        } as any)
+      : {}),
   },
   discoverMenuCloseButton: {
     position: "absolute",
@@ -821,7 +918,7 @@ const styles = StyleSheet.create({
   discoverMenuCardTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#222",
+    color: textMain,
     textAlign: "center",
     marginBottom: 16,
   },
@@ -831,10 +928,10 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 14,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
+    borderBottomColor: pick("rgba(255,255,255,0.12)", "#eee"),
   },
   discoverMenuItemText: {
     fontSize: 15,
-    color: "#333",
+    color: pick("#ffffff", "#333"),
   },
 });

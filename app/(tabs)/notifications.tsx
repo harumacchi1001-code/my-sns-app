@@ -14,25 +14,40 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import StampFrame from "../../components/StampFrame";
+import {
+  isWeb,
+  pick,
+  textFaint,
+  textMain,
+  webGlassBox,
+  webScreenBackground,
+} from "../../components/glass";
 import { auth, db } from "../../firebaseConfig";
+
 type Notification = DocumentData & { id: string };
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+
 export default function NotificationsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+
   // ===== 送信者のユーザー情報・ストーリー関連の状態 =====
   const [userMap, setUserMap] = useState<Record<string, DocumentData>>({});
   const [stories, setStories] = useState<DocumentData[]>([]);
+
   useEffect(() => {
     const myEmail = auth.currentUser?.email;
     if (!myEmail) return;
+
     const q = query(
       collection(db, "notifications"),
       where("toUserEmail", "==", myEmail),
       orderBy("createdAt", "desc")
     );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -41,8 +56,10 @@ export default function NotificationsScreen() {
       setNotifications(data);
       setLoading(false);
     });
+
     return unsubscribe;
   }, []);
+
   // ===== ユーザー情報・ストーリー一覧を取得 =====
   useEffect(() => {
     const unsubscribeUsers = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -55,6 +72,7 @@ export default function NotificationsScreen() {
       });
       setUserMap(map);
     });
+
     const unsubscribeStories = onSnapshot(collection(db, "stories"), (snapshot) => {
       const data = snapshot.docs.map((docSnap) => ({
         id: docSnap.id,
@@ -62,11 +80,13 @@ export default function NotificationsScreen() {
       }));
       setStories(data);
     });
+
     return () => {
       unsubscribeUsers();
       unsubscribeStories();
     };
   }, []);
+
   // ===== 任意のユーザーIDから、24時間以内のストーリー一覧を取り出す =====
   const getUserStories = (userId: string) => {
     const now = Date.now();
@@ -76,12 +96,15 @@ export default function NotificationsScreen() {
       return now - createdMs < DAY_MS;
     });
   };
+
   const myUid = auth.currentUser?.uid;
+
   const formatDate = (timestamp: any) => {
     if (!timestamp?.toDate) return "";
     const date = timestamp.toDate();
     return `${date.getMonth() + 1}/${date.getDate()}`;
   };
+
   const getMessage = (notification: Notification) => {
     const name = notification.fromUsername || notification.fromUserEmail;
     if (notification.type === "like") {
@@ -104,6 +127,7 @@ export default function NotificationsScreen() {
     }
     return "";
   };
+
     const getIconName = (type: string) => {
     if (type === "like") return "favorite";
     if (type === "comment") return "chat-bubble-outline";
@@ -111,18 +135,22 @@ export default function NotificationsScreen() {
     if (type === "nookApproved" || type === "nookNewPost") return "groups";
     return "person";
   };
+
   const getIconColor = (type: string) => {
-    if (type === "like") return "#e74c3c";
-    return "#666";
+    if (type === "like") return pick("#ff7a7a", "#e74c3c");
+    return pick("rgba(255,255,255,0.8)", "#666");
   };
+
   const handlePress = async (notification: Notification) => {
     if (!notification.read) {
       await updateDoc(doc(db, "notifications", notification.id), { read: true });
     }
+
     if (notification.type === "follow_request") {
       router.push("/follow-requests");
       return;
     }
+
     if (notification.type === "follow") {
       if (!notification.fromUserEmail) return;
       const q = query(
@@ -136,18 +164,22 @@ export default function NotificationsScreen() {
       }
       return;
     }
+
     if (notification.type === "nookNewPost" && notification.postId) {
       router.push({ pathname: "/post/[id]", params: { id: notification.postId } });
       return;
     }
+
     if (notification.type === "nookApproved" && notification.nookId) {
       router.push({ pathname: "/nook/[id]", params: { id: notification.nookId } });
       return;
     }
+
     if (notification.postId) {
       router.push({ pathname: "/post/[id]", params: { id: notification.postId } });
     }
   };
+
   // ===== 送信者アイコンをタップしたときの動作：ストーリーがあれば閲覧画面、なければプロフィール =====
   const handleAvatarPress = async (notification: Notification, event: any) => {
     event.stopPropagation();
@@ -160,20 +192,24 @@ export default function NotificationsScreen() {
       router.push({ pathname: "/user/[id]", params: { id: sender.id } });
     }
   };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={pick("#ffffff", undefined as any)} />
       </View>
     );
   }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.pageWrapper}>
         <Text style={styles.header}>{t("notifications.title")}</Text>
+
         <FlatList
           data={notifications}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.centerContainer}>
               <Text style={styles.emptyText}>{t("notifications.empty")}</Text>
@@ -183,6 +219,7 @@ export default function NotificationsScreen() {
             const sender = userMap[item.fromUserEmail];
             const senderStories = sender?.id ? getUserStories(sender.id) : [];
             const hasUnread = senderStories.some((s) => !(s.viewedBy || []).includes(myUid));
+
             return (
               <TouchableOpacity
                 style={[styles.notificationItem, !item.read && styles.unreadItem]}
@@ -211,6 +248,7 @@ export default function NotificationsScreen() {
                     />
                   </View>
                 </TouchableOpacity>
+
                 <View style={styles.textContainer}>
                   <Text style={styles.message}>{getMessage(item)}</Text>
                   <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
@@ -223,10 +261,13 @@ export default function NotificationsScreen() {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
   // ===== ここからWeb版専用 =====
   pageWrapper: Platform.select({
@@ -248,7 +289,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#999",
+    color: textFaint,
     fontSize: 14,
   },
   header: {
@@ -256,7 +297,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingHorizontal: 16,
     paddingVertical: 12,
+    color: textMain,
   },
+  // ===== Web版：通知のカードを、少し内側に寄せて、間をあける =====
+  listContent: isWeb
+    ? { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 20 }
+    : {},
+  // ===== 通知の1件：Web版はガラスのカード、スマホは今までの下線 =====
   notificationItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -265,9 +312,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: "#eee",
     gap: 12,
+    ...(isWeb
+      ? ({
+          ...webGlassBox,
+          borderRadius: 20,
+          borderBottomWidth: 1,
+          borderBottomColor: "rgba(255,255,255,0.12)",
+          marginBottom: 10,
+          transition: "all 0.18s ease",
+        } as any)
+      : {}),
   },
+  // ===== 未読：Web版は、青みがかった明るいガラスにする =====
   unreadItem: {
-    backgroundColor: "#f0f7ff",
+    backgroundColor: pick("rgba(157,180,255,0.14)", "#f0f7ff"),
+    ...(isWeb
+      ? ({
+          borderColor: "rgba(157,180,255,0.4)",
+          borderBottomColor: "rgba(157,180,255,0.4)",
+        } as any)
+      : {}),
   },
   avatarWrapper: {
     position: "relative",
@@ -279,9 +343,9 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#fff",
+    backgroundColor: pick("#1a1d33", "#fff"),
     borderWidth: 1,
-    borderColor: "#eee",
+    borderColor: pick("rgba(255,255,255,0.2)", "#eee"),
     justifyContent: "center",
     alignItems: "center",
   },
@@ -290,11 +354,11 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 14,
-    color: "#222",
+    color: textMain,
     marginBottom: 2,
   },
   date: {
     fontSize: 12,
-    color: "#999",
+    color: textFaint,
   },
 });

@@ -3,22 +3,31 @@ import { collection, DocumentData, onSnapshot, query, where } from "firebase/fir
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  accentColor,
+  isWeb,
+  pick,
+  textFaint,
+  textMain,
+  textSub,
+  webGlassBox,
+  webScreenBackground,
+} from "../components/glass";
 import { auth, db } from "../firebaseConfig";
 
 type Post = DocumentData & { id: string };
 
 // ===== ここからWeb版専用 =====
-const isWeb = Platform.OS === "web";
 const GRID_COLUMNS = isWeb ? 5 : 2;
 // ===== ここまでWeb版専用 =====
 
@@ -52,7 +61,7 @@ export default function LikedPostsScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={pick("#ffffff", undefined as any)} />
       </View>
     );
   }
@@ -109,6 +118,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+    // ===== Web版：暗いオーロラ風の背景 =====
+    ...webScreenBackground,
   },
   // ===== ここからWeb版専用 =====
   // 検索画面と同様、投稿一覧を5列で見せるため、通常より広い最大幅を確保
@@ -131,7 +142,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   emptyText: {
-    color: "#999",
+    color: textFaint,
     fontSize: 14,
   },
   header: {
@@ -140,16 +151,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: pick(0, 0.5),
     borderBottomColor: "#eee",
   },
   backText: {
-    color: "#4a90e2",
+    color: accentColor,
     fontSize: 15,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",
+    color: textMain,
   },
   listContent: {
     paddingHorizontal: 12,
@@ -163,7 +175,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   // ===== ここまでWeb版専用 =====
-  // ===== ここからWeb版専用 =====
+  // ===== 投稿のカード：Web版はガラスのカード、スマホは今までの黒い枠 =====
   card: {
     width: isWeb ? "18.4%" : "48%",
     borderWidth: 1.5,
@@ -171,12 +183,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#fff",
+    ...(isWeb ? ({ ...webGlassBox, borderRadius: 20 } as any) : {}),
   },
-  // ===== ここまでWeb版専用 =====
   thumbnailWrapper: {
     width: "100%",
     aspectRatio: 16 / 9,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: pick("rgba(255,255,255,0.06)", "#f0f0f0"),
   },
   thumbnail: {
     width: "100%",
@@ -186,19 +198,20 @@ const styles = StyleSheet.create({
   thumbnailPlaceholder: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#eee",
+    backgroundColor: pick("rgba(255,255,255,0.08)", "#eee"),
   },
   cardBody: {
     padding: 8,
+    ...(isWeb ? { paddingHorizontal: 12, paddingVertical: 10 } : {}),
   },
   title: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#222",
+    color: textMain,
     marginBottom: 6,
   },
   metaText: {
     fontSize: 11,
-    color: "#666",
+    color: textSub,
   },
 });
