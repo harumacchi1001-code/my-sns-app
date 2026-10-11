@@ -1,8 +1,9 @@
 // ===== ここからWeb版専用ファイル =====
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import ChatPanel from "../../components/ChatPanel";
 import WebSidebar from "../../components/WebSidebar";
 
 // ===== ここからWeb版専用：モバイルブラウザ判定のしきい値 =====
@@ -11,6 +12,14 @@ const MOBILE_BREAKPOINT = 768;
 // ===== サイドバーの、折りたたみ時・展開時の幅と同じ値。中身と重ならないよう、左に余白として使う =====
 const SIDEBAR_COLLAPSED_WIDTH = 64;
 const SIDEBAR_EXPANDED_TOTAL_WIDTH = 200;
+
+// ===== チャットパネルの、幅の決め方（ブラウザの幅に合わせて変える） =====
+const CHAT_PANEL_MIN_WIDTH = 300;
+const CHAT_PANEL_MAX_WIDTH = 400;
+const CHAT_PANEL_WIDTH_RATIO = 0.28; // ブラウザの幅の28%
+const CHAT_PANEL_PUSH_BREAKPOINT = 1100; // この幅以上なら、画面の中身を左に寄せて、重ならないようにする
+const CHAT_PANEL_SIDE_MARGIN = 24; // パネルの右の余白
+const CHAT_PANEL_CONTENT_GAP = 16; // パネルと、画面の中身との、すき間
 
 // ===== ここからWeb版専用：タブの名前とアイコンの対応（下タブバー用） =====
 const MOBILE_TAB_ITEMS = [
@@ -48,15 +57,12 @@ function MobileBottomTabBar({ state, navigation }: any) {
 }
 // ===== ここまでWeb版専用 =====
 
-function FloatingChatButton() {
-  const router = useRouter();
+// ===== 右下の「チャット」ボタン（押すと、メッセージのパネルが開く） =====
+function FloatingChatButton({ onPress }: { onPress: () => void }) {
   return (
-    <TouchableOpacity
-      style={styles.floatingChatButton}
-      onPress={() => router.push("/chat")}
-    >
+    <TouchableOpacity style={styles.floatingChatButton} onPress={onPress}>
       <Text style={styles.floatingChatLabel}>チャット</Text>
-      <MaterialIcons name="send" size={20} color="#222" />
+      <MaterialIcons name="send" size={18} color="#ffffff" />
     </TouchableOpacity>
   );
 }
@@ -77,6 +83,27 @@ export default function WebTabLayout() {
       useNativeDriver: false,
     }).start();
   }, [isSidebarExpanded]);
+
+  // ===== チャットパネルの、開閉・幅・画面を寄せる量 =====
+  const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
+  const chatPanelWidth = Math.round(
+    Math.min(CHAT_PANEL_MAX_WIDTH, Math.max(CHAT_PANEL_MIN_WIDTH, width * CHAT_PANEL_WIDTH_RATIO))
+  );
+  // 画面が広いときだけ、中身を左に寄せる（狭いときは、パネルが上に重なる）
+  const canPushContent = width >= CHAT_PANEL_PUSH_BREAKPOINT;
+  const rightReserve =
+    isChatPanelOpen && canPushContent
+      ? chatPanelWidth + CHAT_PANEL_SIDE_MARGIN + CHAT_PANEL_CONTENT_GAP
+      : 0;
+  const paddingRightAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(paddingRightAnim, {
+      toValue: rightReserve,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [rightReserve]);
+
   return (
     <View style={isMobileWidth ? styles.rootColumn : styles.rootRow}>
       {/* ===== ここからWeb版専用：共通サイドバー（幅が狭いときは、自動的に非表示になる） ===== */}
@@ -86,7 +113,7 @@ export default function WebTabLayout() {
         style={[
           styles.tabsContent,
           { backgroundColor: "transparent" } as any,
-          !isMobileWidth && { paddingLeft: paddingAnim },
+          !isMobileWidth && { paddingLeft: paddingAnim, paddingRight: paddingRightAnim },
         ]}
       >
         <Tabs
@@ -103,8 +130,13 @@ export default function WebTabLayout() {
           <Tabs.Screen name="publishedList" options={{ href: null }} />
         </Tabs>
       </Animated.View>
-      {/* ===== ここからWeb版専用（スマホ幅のときは、右上ボタンを出さない） ===== */}
-      {!isMobileWidth && <FloatingChatButton />}
+      {/* ===== ここからWeb版専用（スマホ幅のときは、チャットボタンとパネルを出さない） ===== */}
+      {!isMobileWidth && !isChatPanelOpen && (
+        <FloatingChatButton onPress={() => setIsChatPanelOpen(true)} />
+      )}
+      {!isMobileWidth && isChatPanelOpen && (
+        <ChatPanel width={chatPanelWidth} onClose={() => setIsChatPanelOpen(false)} />
+      )}
       {/* ===== ここまでWeb版専用 ===== */}
     </View>
   );
@@ -143,30 +175,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   // ===== ここまでWeb版専用 =====
+  // 右下に置く、ガラス風の「チャット」ボタン
   floatingChatButton: {
     position: "fixed" as any,
-    top: 20,
+    top: 24,
     right: 24,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    height: 44,
-    paddingHorizontal: 16,
-    borderRadius: 22,
-    backgroundColor: "#fff",
+    height: 48,
+    paddingHorizontal: 22,
+    borderRadius: 24,
+    backgroundColor: "rgba(24,26,44,0.6)",
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "rgba(255,255,255,0.14)",
     zIndex: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    ...({
+      backdropFilter: "blur(24px) saturate(180%)",
+      boxShadow: "0 12px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12)",
+    } as any),
   },
   floatingChatLabel: {
     fontSize: 14,
-    color: "#222",
-    fontWeight: "600",
+    color: "#ffffff",
+    fontWeight: "700",
   },
+    panel: {
+    position: "fixed" as any,
+    top: 24,
+    right: 24,
+    },
 });
 // ===== ここまでWeb版専用ファイル =====
